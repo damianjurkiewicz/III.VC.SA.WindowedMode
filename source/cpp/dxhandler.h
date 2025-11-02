@@ -89,4 +89,5 @@ public:
     static bool bUseBorder;
 
     static bool bRequestWindowedMode;
+    static bool bDisableHotkeys;
 };

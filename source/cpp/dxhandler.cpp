@@ -51,6 +51,7 @@ SHELLEXECUTEINFOA CDxHandler::ShExecInfo = { 0 };
 char CDxHandler::lpWindowName[MAX_PATH];
 
 bool CDxHandler::bRequestWindowedMode = false; // NEW
+bool CDxHandler::bDisableHotkeys = false;
 
 std::tuple<int32_t, int32_t> GetDesktopRes()
 {
@@ -78,6 +79,9 @@ void SetCursorVisible(bool state)
 
 void CDxHandler::ProcessIni(void)
 {
+
+    bDisableHotkeys = iniReader.ReadInteger("MAIN", "DisableHotkeys", 0) != 0;
+
     bUseMenus = iniReader.ReadInteger("MAIN", "ShowMenu", 1) != 0;
     bUseBorder = iniReader.ReadInteger("MAIN", "ShowBorder", 1) != 0;
 
@@ -679,7 +683,6 @@ int CDxHandler::ProcessMouseState(void)
     if (dwLastCheck + 1000 < GetTickCount())
     {
         dwLastCheck = GetTickCount();
-
     }
     else
     {
@@ -689,19 +692,15 @@ int CDxHandler::ProcessMouseState(void)
                 constexpr auto dll1 = L"GTAVC.WidescreenFix.asi";
                 constexpr auto dll2 = L"GTA3.WidescreenFix";
                 auto hm = GetModuleHandleW(dll1);
-                if (!hm)
-                    hm = GetModuleHandleW(dll2);
+                if (!hm) hm = GetModuleHandleW(dll2);
                 return hm;
-            };
+                };
 
             auto m = GetWidescreenFix();
             if (m)
             {
                 auto UpdateVars = (void (*)())GetProcAddress(m, "UpdateVars");
-                if (UpdateVars)
-                {
-                    UpdateVars();
-                }
+                if (UpdateVars) UpdateVars();
             }
         }
 
@@ -716,51 +715,61 @@ int CDxHandler::ProcessMouseState(void)
             if (bInGameSA)
             {
                 CPostEffectsSetupBackBufferVertex();
-                //CPostEffectsDoScreenModeDependentInitializations();
+                // CPostEffectsDoScreenModeDependentInitializations();
             }
 
             bResChanged = false;
         }
     }
 
-    if (!bFullMode && !bShiftEnterLastState && bShiftEnterCurState)
-    {
-        if (bUseMenus && !bUseBorder)
-            bUseMenus = true;
-        else
-            bUseMenus = !bUseMenus;
 
-        bUseBorder = true;
-        SetMenu(*hGameWnd, bUseMenus ? hMenuWindows : NULL);
-        iniReader.WriteInteger("MAIN", "ShowMenu", bUseMenus, true);
-    }
-    else
+    if (!bDisableHotkeys)
     {
-        if (!bFullMode && !bCtrlEnterLastState && bCtrlEnterCurState)
+        if (!bFullMode && !bShiftEnterLastState && bShiftEnterCurState)
         {
-            bUseBorder = !bUseBorder;
-            DWORD dwWndStyle = GetWindowLong(*hGameWnd, GWL_STYLE);
-            if (!bUseBorder)
+            if (bUseMenus && !bUseBorder) bUseMenus = true;
+            else                          bUseMenus = !bUseMenus;
+
+            bUseBorder = true;
+            SetMenu(*hGameWnd, bUseMenus ? hMenuWindows : NULL);
+            iniReader.WriteInteger("MAIN", "ShowMenu", bUseMenus, true);
+        }
+        else
+        {
+            if (!bFullMode && !bCtrlEnterLastState && bCtrlEnterCurState)
             {
-                dwWndStyle &= ~WS_OVERLAPPEDWINDOW;
+                bUseBorder = !bUseBorder;
+                DWORD dwWndStyle = GetWindowLong(*hGameWnd, GWL_STYLE);
+                if (!bUseBorder) dwWndStyle &= ~WS_OVERLAPPEDWINDOW;
+                else             dwWndStyle |= WS_OVERLAPPEDWINDOW;
+                SetWindowLong(*hGameWnd, GWL_STYLE, dwWndStyle);
+                iniReader.WriteInteger("MAIN", "ShowBorder", bUseBorder, true);
             }
-            else
-            {
-                dwWndStyle |= WS_OVERLAPPEDWINDOW;
-            }
-            SetWindowLong(*hGameWnd, GWL_STYLE, dwWndStyle);
-            iniReader.WriteInteger("MAIN", "ShowBorder", bUseBorder, true);
+        }
+
+        if (!bAltEnterLastState && bAltEnterCurState)
+        {
+            ToggleFullScreen();
         }
     }
+
+
     bShiftEnterLastState = bShiftEnterCurState;
     bCtrlEnterLastState = bCtrlEnterCurState;
+    bAltEnterLastState = bAltEnterCurState;
 
-    if (!bAltEnterLastState && bAltEnterCurState)
+
+    if (!*bMenuVisible)
     {
-        ToggleFullScreen();
+        if (!bDisableHotkeys && !bCtrlAltLastState && bCtrlAltCurState)
+        {
+            if (bGameMouseInactive) { DxInputCreateDevice(true);  bGameMouseInactive = false; }
+            else { DxInputCreateDevice(false); bGameMouseInactive = true; }
+        }
     }
 
-    bAltEnterLastState = bAltEnterCurState;
+    bCtrlAltLastState = bCtrlAltCurState;
+
 
     if (*bMenuVisible)
     {
@@ -769,27 +778,9 @@ int CDxHandler::ProcessMouseState(void)
     }
     else
     {
-        if (!bCtrlAltLastState && bCtrlAltCurState)
-        {
-            if (bGameMouseInactive)
-            {
-                DxInputCreateDevice(true);
-                bGameMouseInactive = false;
-            }
-            else
-            {
-                DxInputCreateDevice(false);
-                bGameMouseInactive = true;
-            }
-        }
-
         if (!bGameMouseInactive && GetForegroundWindow() == *hGameWnd)
-        {
             bShowCursor = false;
-        }
     }
-
-    bCtrlAltLastState = bCtrlAltCurState;
 
     SetCursorVisible(bShowCursor);
 
@@ -800,6 +791,7 @@ int CDxHandler::ProcessMouseState(void)
 
     return 1;
 }
+
 
 void __declspec(naked) CDxHandler::HookDirect3DDeviceReplacer(void)
 {
