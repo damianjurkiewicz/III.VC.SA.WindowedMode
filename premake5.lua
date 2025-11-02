@@ -37,7 +37,7 @@ project "III.VC.SA.WindowedMode"
    filter "configurations:Release"
       defines { "NDEBUG" }
       optimize "On"
-	  flags { "StaticRuntime" }
+	  staticruntime "On"
 	  targetdir "data"
 	  
 	  
@@ -73,5 +73,5 @@ project "III.VC.SA.CoordsManager"
    filter "configurations:Release"
       defines { "NDEBUG" }
       optimize "On"
-	  flags { "StaticRuntime" }
+	  staticruntime "On"
 	  targetdir "data"
