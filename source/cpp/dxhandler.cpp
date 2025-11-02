@@ -1,6 +1,6 @@
 #include "dxhandler.h"
 
-CIniReader iniReader("");
+CIniReader iniReader("III.VC.SA.WindowedMode");
 int CDxHandler::nResetCounter = 0;
 int CDxHandler::nCurrentWidth = 0, CDxHandler::nCurrentHeight = 0;
 int CDxHandler::nNonFullWidth = 600, CDxHandler::nNonFullHeight = 450, CDxHandler::nNonFullPosX = -1, CDxHandler::nNonFullPosY = -1;
@@ -280,7 +280,7 @@ void CDxHandler::ToggleFullScreen(void)
 
     bResChanged = true;
     iniReader.WriteInteger("MAIN", "FullScreenMode", targetFull, true);
-    iniReader.WriteInteger("MAIN", "FullMode", targetFull, true);
+   
 }
 
 void CDxHandler::StoreRestoreWindowInfo(bool bRestore)
