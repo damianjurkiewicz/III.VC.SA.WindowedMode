@@ -50,6 +50,8 @@ bool CDxHandler::bUseBorder = true;
 SHELLEXECUTEINFOA CDxHandler::ShExecInfo = { 0 };
 char CDxHandler::lpWindowName[MAX_PATH];
 
+bool CDxHandler::bRequestWindowedMode = false; // NEW
+
 std::tuple<int32_t, int32_t> GetDesktopRes()
 {
     HMONITOR monitor = MonitorFromWindow(GetDesktopWindow(), MONITOR_DEFAULTTONEAREST);
@@ -78,6 +80,20 @@ void CDxHandler::ProcessIni(void)
 {
     bUseMenus = iniReader.ReadInteger("MAIN", "ShowMenu", 1) != 0;
     bUseBorder = iniReader.ReadInteger("MAIN", "ShowBorder", 1) != 0;
+
+    int iniFull = iniReader.ReadInteger("MAIN", "FullScreenMode",
+        iniReader.ReadInteger("MAIN", "FullMode", -1));
+
+    if (iniFull == 1) {
+        bRequestFullMode = true;
+        bRequestWindowedMode = false;
+        bFullMode = false;
+    }
+    else if (iniFull == 0) {
+        bRequestFullMode = false;
+        bRequestWindowedMode = true;
+        bFullMode = false;
+    }
 }
 
 template<class D3D_TYPE>
@@ -153,29 +169,31 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
 
     HMENU hMenuSet = NULL;
 
-    if (bRequestFullMode || (nCurrentWidth == nMonitorWidth && nCurrentHeight == nMonitorHeight))
-    {
-        dwWndStyle &= ~WS_OVERLAPPEDWINDOW;
+    bool wantsFull = bRequestFullMode;
+    bool wantsWindowed = bRequestWindowedMode;
 
+    if (wantsFull || (!wantsWindowed && nCurrentWidth == nMonitorWidth && nCurrentHeight == nMonitorHeight))
+    {
+       
+        dwWndStyle &= ~WS_OVERLAPPEDWINDOW;
         pParams->BackBufferWidth = nMonitorWidth;
         pParams->BackBufferHeight = nMonitorHeight;
-
         bFullMode = true;
-        bRequestFullMode = false;
     }
     else
     {
-        if (!bUseBorder)
-        {
-            dwWndStyle &= ~WS_OVERLAPPEDWINDOW;
-        }
-        else
-        {
+       
+        if (!bUseBorder) dwWndStyle &= ~WS_OVERLAPPEDWINDOW;
+        else {
             dwWndStyle |= WS_OVERLAPPEDWINDOW;
             hMenuSet = bUseMenus ? hMenuWindows : NULL;
         }
         bFullMode = false;
     }
+
+ 
+    bRequestFullMode = false;
+    bRequestWindowedMode = false;
 
     RECT rcClient = { 0, 0, pParams->BackBufferWidth, pParams->BackBufferHeight };
     AdjustWindowRectEx(&rcClient, dwWndStyle, hMenuSet != NULL, GetWindowLong(*hGameWnd, GWL_EXSTYLE));
@@ -244,23 +262,21 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
 
 void CDxHandler::ToggleFullScreen(void)
 {
-    int nModeIndex = RwEngineGetCurrentVideoMode();
+    bool targetFull = !bFullMode;
 
-    if (bFullMode)
-    {
+    if (targetFull) {
+        auto [mw, mh] = GetDesktopRes();
+        bRequestFullMode = true;
+        SetWindowPos(*hGameWnd, NULL, 0, 0, mw, mh, SWP_NOACTIVATE | SWP_NOZORDER);
+    }
+    else {
+        bRequestWindowedMode = true;
         SetWindowPos(*hGameWnd, NULL, nNonFullPosX, nNonFullPosY, nNonFullWidth, nNonFullHeight, SWP_NOACTIVATE | SWP_NOZORDER);
     }
-    else
-    {
-        auto[nMonitorWidth, nMonitorHeight] = GetDesktopRes();
 
-        bRequestFullMode = true;
-
-        SetWindowPos(*hGameWnd, NULL, 0, 0, nMonitorWidth, nMonitorHeight, SWP_NOACTIVATE | SWP_NOZORDER);
-    }
     bResChanged = true;
-
-    iniReader.WriteInteger("MAIN", "FullMode", bFullMode, true);
+    iniReader.WriteInteger("MAIN", "FullScreenMode", targetFull, true);
+    iniReader.WriteInteger("MAIN", "FullMode", targetFull, true);
 }
 
 void CDxHandler::StoreRestoreWindowInfo(bool bRestore)

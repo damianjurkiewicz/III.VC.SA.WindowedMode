@@ -38,6 +38,8 @@ public:
     static bool bShiftEnterLastState;
     static bool bCtrlEnterLastState;
 
+
+
     static int nCurrentWidth, nCurrentHeight;
     static int nNonFullWidth, nNonFullHeight, nNonFullPosX, nNonFullPosY;
     static bool bFullMode, bRequestFullMode, bRequestNoBorderMode;
@@ -85,4 +87,6 @@ public:
     static bool bWindowed;
     static bool bUseMenus;
     static bool bUseBorder;
+
+    static bool bRequestWindowedMode;
 };
