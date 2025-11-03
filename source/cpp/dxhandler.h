@@ -12,7 +12,6 @@ public:
     static void StoreRestoreWindowInfo(bool bRestore);
     static void AdjustGameToWindowSize(void);
     static void MainCameraRebuildRaster(RwCamera* pCamera);
-    static void Direct3DDeviceReplace(void);
     static void Direct3DDeviceReplaceSA(void);
     static void InjectWindowProc(void);
     static void RemoveWindowProc(void);
@@ -21,14 +20,11 @@ public:
     static void DxInputCreateDevice(bool bExclusive);
     static bool IsCursorInClientRect(void);
     static int ProcessMouseState(void);
-    static void HookDirect3DDeviceReplacer(void);
     static void HookDirect3DDeviceReplacerSA(void);
-    static void SetupHooksVC(void);
-    static void SetupHooksIII(void);
     static void SetupHooksSA(void);
     static void ProcessIni(void);
-    static HRESULT(__stdcall *oldReset)(LPDIRECT3DDEVICE8 pDevice, void* pPresentationParameters);
-    static HRESULT(__stdcall *oldSetViewport)(LPDIRECT3DDEVICE8 pDevice, CONST D3DVIEWPORT8* pViewport);
+    static HRESULT(__stdcall* oldReset)(LPDIRECT3DDEVICE8 pDevice, void* pPresentationParameters);
+    static HRESULT(__stdcall* oldSetViewport)(LPDIRECT3DDEVICE8 pDevice, CONST D3DVIEWPORT8* pViewport);
 
     static bool bIsInputExclusive;
     static bool bCursorStatus;
@@ -71,9 +67,9 @@ public:
     static int(*DxInputGetMouseState)(int a1);
     static void(*ReinitializeRw)(int a1);
     static int(*RwEngineGetCurrentVideoMode)();
-    static RwCamera*(*RwCameraClear)(RwCamera* pCamera, void* pColor, int32_t nClearMode);
+    static RwCamera* (*RwCameraClear)(RwCamera* pCamera, void* pColor, int32_t nClearMode);
     static bool(*RwRasterDestroy)(RwRaster* pRaster);
-    static RwRaster*(*RwRasterCreate)(int32_t nWidth, int32_t nHeight, int32_t nDepth, int32_t nFlags);
+    static RwRaster* (*RwRasterCreate)(int32_t nWidth, int32_t nHeight, int32_t nDepth, int32_t nFlags);
     static RwCamera** pRenderCamera;
     static bool* bBlurOn;
     static RsGlobalType* RsGlobal;
@@ -81,7 +77,6 @@ public:
     static uint32_t CamCol;
     static uint32_t HookParams;
     static uint32_t HookDirect3DDeviceReplacerJmp;
-    static bool bInGame3VC;
     static bool bInGameSA;
     static bool bResChanged;
     static bool bWindowed;
