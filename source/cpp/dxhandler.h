@@ -97,5 +97,6 @@ public:
     static int ini_SwapEffect;
     static int ini_PresentationInterval;
     static int ini_RefreshRateInHz;
-
+    static int ini_MultiSampleQuality;
+    static int ini_Flags;
 };

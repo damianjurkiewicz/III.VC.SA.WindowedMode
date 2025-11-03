@@ -60,6 +60,8 @@ int CDxHandler::ini_MultiSampleType = -1;
 int CDxHandler::ini_SwapEffect = -1;
 int CDxHandler::ini_PresentationInterval = -1;
 int CDxHandler::ini_RefreshRateInHz = -1;
+int CDxHandler::ini_MultiSampleQuality = -1;
+int CDxHandler::ini_Flags = -1;
 
 std::tuple<int32_t, int32_t> GetDesktopRes()
 {
@@ -94,6 +96,8 @@ void CDxHandler::ProcessIni(void)
     ini_SwapEffect = iniReader.ReadInteger("Direct3D", "SwapEffect", -1);
     ini_PresentationInterval = iniReader.ReadInteger("Direct3D", "PresentationInterval", -1);
     ini_RefreshRateInHz = iniReader.ReadInteger("Direct3D", "RefreshRateInHz", -1);
+    ini_MultiSampleQuality = iniReader.ReadInteger("Direct3D", "MultiSampleQuality", -1);
+    ini_Flags = iniReader.ReadInteger("Direct3D", "Flags", -1);
 }
 
 template<class D3D_TYPE>
@@ -133,11 +137,12 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
 
     bool bOldRecursion = bStopRecursion;
 
-    // --- POCZĄTEK MODYFIKACJI ---
-    // 1. Zawsze wymuszaj tryb okienkowy (borderless)
+    // --- START OF CONFIGURATION ---
+
+    // 1. Always force windowed (borderless) mode
     pParams->Windowed = TRUE;
 
-    // 2. Zastosuj ustawienia z pliku .ini (tylko jeśli nie są -1)
+    // 2. Apply all settings from the .ini file (only if they are not -1)
     if (ini_BackBufferFormat != -1)
     {
         pParams->BackBufferFormat = (D3DFORMAT)ini_BackBufferFormat;
@@ -150,18 +155,24 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
 
     if (ini_AutoDepthStencilFormat != -1)
     {
-        // Ta linia była u Ciebie zakomentowana, ale .ini ją obsłuży
         pParams->AutoDepthStencilFormat = (D3DFORMAT)ini_AutoDepthStencilFormat;
     }
 
     if (ini_BackBufferCount != -1)
+        
     {
         pParams->BackBufferCount = ini_BackBufferCount;
     }
 
-    if (ini_MultiSampleType != -1)
+        if (ini_MultiSampleType != -1)
+        {
+            pParams->MultiSampleType = (D3DMULTISAMPLE_TYPE)ini_MultiSampleType;
+        }
+
+    // --- NEW ---
+    if (ini_MultiSampleQuality != -1)
     {
-        pParams->MultiSampleType = (D3DMULTISAMPLE_TYPE)ini_MultiSampleType;
+        pParams->MultiSampleQuality = ini_MultiSampleQuality;
     }
 
     if (ini_SwapEffect != -1)
@@ -179,25 +190,32 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
         pParams->FullScreen_RefreshRateInHz = ini_RefreshRateInHz;
     }
 
-    // 3. Zabezpieczenie dla MultiSample (zostawiamy, jest ważne)
+    // --- NEW ---
+    if (ini_Flags != -1)
+    {
+        // This will REPLACE all default flags. 
+        // Use 0 to clear all flags.
+        pParams->Flags = ini_Flags;
+    }
+
+    // 3. Safety check for MultiSampling (MSAA)
+    // This MUST run after .ini settings are applied.
     if (pParams->MultiSampleType > 0)
     {
-        // Jeśli MSAA jest włączone (z gry lub z .ini), wymuś DISCARD
+        // If MSAA is enabled (from game or .ini), we MUST force DISCARD swap effect
+        // to prevent a crash.
         pParams->SwapEffect = D3DSWAPEFFECT_DISCARD;
-
-        // Możemy też nadpisać wartość z .ini, jeśli jest niekompatybilna
-        if (ini_SwapEffect != -1 && ini_SwapEffect != D3DSWAPEFFECT_DISCARD)
-        {
-            // Opcjonalnie: logowanie błędu, że .ini ma złą kombinację
-        }
     }
+    // --- END OF CONFIGURATION ---
+
+
+    // --- BORDERLESS FULLSCREEN LOGIC (No need to edit below) ---
 
     DWORD dwWndStyle = GetWindowLong(*hGameWnd, GWL_STYLE);
 
     auto [nMonitorWidth, nMonitorHeight] = GetDesktopRes();
-    // HMENU hMenuSet = NULL; // Usunięto
 
-    // Zawsze wymuszaj tryb pełnoekranowy
+    // Always force borderless fullscreen style
     dwWndStyle &= ~WS_OVERLAPPEDWINDOW;
     pParams->BackBufferWidth = nMonitorWidth;
     pParams->BackBufferHeight = nMonitorHeight;
@@ -205,22 +223,16 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
     bUseBorder = false;
     bUseMenus = false;
 
-    // Usunięto blok 'else' dla trybu okienkowego
-
     nCurrentWidth = (int)pParams->BackBufferWidth;
     nCurrentHeight = (int)pParams->BackBufferHeight;
-
-    // Usunięto sprawdzanie 'if (nCurrentWidth <= 0 ...)'
 
     RsGlobal->MaximumWidth = pParams->BackBufferWidth;
     RsGlobal->MaximumHeight = pParams->BackBufferHeight;
 
     bRequestFullMode = false;
-    // bRequestWindowedMode = false; // Usunięto
 
     RECT rcClient = { 0, 0, pParams->BackBufferWidth, pParams->BackBufferHeight };
 
-    // Poprawiono błąd składniowy i usunięto hMenuSet
     AdjustWindowRectEx(&rcClient, dwWndStyle, FALSE, GetWindowLong(*hGameWnd, GWL_EXSTYLE));
 
     int nClientWidth = rcClient.right - rcClient.left;
@@ -230,21 +242,14 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
     bStopRecursion = true;
 
     SetWindowLong(*hGameWnd, GWL_STYLE, dwWndStyle);
-    SetMenu(*hGameWnd, NULL); // Zawsze usuwaj menu
-
-    // Usunięto 'if (hMenuSet)'
+    SetMenu(*hGameWnd, NULL);
 
     nClientWidth = min(nClientWidth, nMonitorWidth);
     nClientHeight = min(nClientHeight, nMonitorHeight);
 
-    // Usunięto blok 'if (!bFullMode)'
-
-    // Zawsze pozycjonuj okno na 0,0 (tryb pełnoekranowy)
     SetWindowPos(*hGameWnd, HWND_NOTOPMOST, 0, 0, nClientWidth, nClientHeight, SWP_NOACTIVATE);
 
     bStopRecursion = bOldRecursion;
-
-    // Usunięto blok GetClientRect i nadpisywanie pParams->... (naprawa błędu)
 
     pParams->hDeviceWindow = *hGameWnd;
     bResChanged = true;
