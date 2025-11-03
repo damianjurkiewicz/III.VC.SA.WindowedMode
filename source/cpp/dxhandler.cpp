@@ -1,4 +1,9 @@
 ﻿#include "dxhandler.h"
+#include "injector/injector.hpp"
+#include "injector/hooking.hpp"
+#include "injector/utility.hpp"
+#define _CRT_SECURE_NO_WARNINGS
+#pragma warning(disable:4996 4838)
 
 const bool FORCE_FULLSCREEN_MODE = true;
 
@@ -15,8 +20,6 @@ bool CDxHandler::bIsInputExclusive = false;
 bool CDxHandler::bGameMouseInactive = false;
 bool CDxHandler::bStopRecursion = false;
 bool CDxHandler::bSizingLoop = false;
-IDirect3D8** CDxHandler::pIntDirect3DMain;
-IDirect3DDevice8** CDxHandler::pDirect3DDevice;
 GameDxInput** CDxHandler::pInputData;
 bool* CDxHandler::bMenuVisible;
 HWND* CDxHandler::hGameWnd;
@@ -24,8 +27,8 @@ DisplayMode** CDxHandler::pDisplayModes;
 
 // Usunięto bRequestWindowedMode
 
-HRESULT(__stdcall* CDxHandler::oldReset)(LPDIRECT3DDEVICE8 pDevice, void* pPresentationParameters);
-HRESULT(__stdcall* CDxHandler::oldSetViewport)(LPDIRECT3DDEVICE8 pDevice, CONST D3DVIEWPORT8* pViewport);
+
+
 void(*CDxHandler::CPostEffectsDoScreenModeDependentInitializations)();
 void(*CDxHandler::CPostEffectsSetupBackBufferVertex)();
 void(*CDxHandler::CMBlurMotionBlurOpen)(RwCamera*);
@@ -39,8 +42,6 @@ RwCamera** CDxHandler::pRenderCamera;
 RsGlobalType* CDxHandler::RsGlobal;
 uint32_t CDxHandler::RwD3D8AdapterInformation_DisplayMode;
 uint32_t CDxHandler::CamCol;
-uint32_t CDxHandler::HookParams;
-uint32_t CDxHandler::HookDirect3DDeviceReplacerJmp;
 bool* CDxHandler::bBlurOn;
 bool CDxHandler::bInGameSA = false;
 bool CDxHandler::bResChanged = false;
@@ -62,6 +63,12 @@ int CDxHandler::ini_PresentationInterval = -1;
 int CDxHandler::ini_RefreshRateInHz = -1;
 int CDxHandler::ini_MultiSampleQuality = -1;
 int CDxHandler::ini_Flags = -1;
+
+
+// ... (zaraz po ini_Flags = -1;)
+Direct3DCreate9_t CDxHandler::original_Direct3DCreate9 = NULL;
+CreateDevice_t    CDxHandler::original_CreateDevice = NULL;
+Reset_t           CDxHandler::original_Reset = NULL;
 
 std::tuple<int32_t, int32_t> GetDesktopRes()
 {
@@ -100,160 +107,9 @@ void CDxHandler::ProcessIni(void)
     ini_Flags = iniReader.ReadInteger("Direct3D", "Flags", -1);
 }
 
-template<class D3D_TYPE>
-HRESULT CDxHandler::HandleReset(D3D_TYPE* pPresentationParameters, void* pSourceAddress)
-{
-    if (bWindowed)
-    {
-        CDxHandler::AdjustPresentParams(pPresentationParameters);
-    }
-
-    CDxHandler::nResetCounter++;
-
-    bool bInitialLocked = CDxHandler::bChangingLocked;
-    if (!bInitialLocked) CDxHandler::StoreRestoreWindowInfo(false);
-
-    bool bOldRecursion = CDxHandler::bStopRecursion;
-    CDxHandler::bStopRecursion = true;
-    HRESULT hRes = oldReset(*pDirect3DDevice, pPresentationParameters);
-    CDxHandler::bStopRecursion = bOldRecursion;
-
-    if (!bInitialLocked) CDxHandler::StoreRestoreWindowInfo(true);
-
-    if (SUCCEEDED(hRes))
-    {
-        int nModeIndex = RwEngineGetCurrentVideoMode();
-        (*CDxHandler::pDisplayModes)[nModeIndex].nWidth = pPresentationParameters->BackBufferWidth;
-        (*CDxHandler::pDisplayModes)[nModeIndex].nHeight = pPresentationParameters->BackBufferHeight;
-    }
-
-    return hRes;
-}
-
-template<class D3D_TYPE>
-void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
-{
-    if (!bWindowed) return;
-
-    bool bOldRecursion = bStopRecursion;
-
-    // --- START OF CONFIGURATION ---
-
-    // 1. Always force windowed (borderless) mode
-    pParams->Windowed = TRUE;
-
-    // 2. Apply all settings from the .ini file (only if they are not -1)
-    if (ini_BackBufferFormat != -1)
-    {
-        pParams->BackBufferFormat = (D3DFORMAT)ini_BackBufferFormat;
-    }
-
-    if (ini_EnableAutoDepthStencil != -1)
-    {
-        pParams->EnableAutoDepthStencil = (BOOL)ini_EnableAutoDepthStencil;
-    }
-
-    if (ini_AutoDepthStencilFormat != -1)
-    {
-        pParams->AutoDepthStencilFormat = (D3DFORMAT)ini_AutoDepthStencilFormat;
-    }
-
-    if (ini_BackBufferCount != -1)
-        
-    {
-        pParams->BackBufferCount = ini_BackBufferCount;
-    }
-
-        if (ini_MultiSampleType != -1)
-        {
-            pParams->MultiSampleType = (D3DMULTISAMPLE_TYPE)ini_MultiSampleType;
-        }
-
-    // --- NEW ---
-    if (ini_MultiSampleQuality != -1)
-    {
-        pParams->MultiSampleQuality = ini_MultiSampleQuality;
-    }
-
-    if (ini_SwapEffect != -1)
-    {
-        pParams->SwapEffect = (D3DSWAPEFFECT)ini_SwapEffect;
-    }
-
-    if (ini_PresentationInterval != -1)
-    {
-        pParams->FullScreen_PresentationInterval = ini_PresentationInterval;
-    }
-
-    if (ini_RefreshRateInHz != -1)
-    {
-        pParams->FullScreen_RefreshRateInHz = ini_RefreshRateInHz;
-    }
-
-    // --- NEW ---
-    if (ini_Flags != -1)
-    {
-        // This will REPLACE all default flags. 
-        // Use 0 to clear all flags.
-        pParams->Flags = ini_Flags;
-    }
-
-    // 3. Safety check for MultiSampling (MSAA)
-    // This MUST run after .ini settings are applied.
-    if (pParams->MultiSampleType > 0)
-    {
-        // If MSAA is enabled (from game or .ini), we MUST force DISCARD swap effect
-        // to prevent a crash.
-        pParams->SwapEffect = D3DSWAPEFFECT_DISCARD;
-    }
-    // --- END OF CONFIGURATION ---
 
 
-    // --- BORDERLESS FULLSCREEN LOGIC (No need to edit below) ---
 
-    DWORD dwWndStyle = GetWindowLong(*hGameWnd, GWL_STYLE);
-
-    auto [nMonitorWidth, nMonitorHeight] = GetDesktopRes();
-
-    // Always force borderless fullscreen style
-    dwWndStyle &= ~WS_OVERLAPPEDWINDOW;
-    pParams->BackBufferWidth = nMonitorWidth;
-    pParams->BackBufferHeight = nMonitorHeight;
-    bFullMode = true;
-    bUseBorder = false;
-    bUseMenus = false;
-
-    nCurrentWidth = (int)pParams->BackBufferWidth;
-    nCurrentHeight = (int)pParams->BackBufferHeight;
-
-    RsGlobal->MaximumWidth = pParams->BackBufferWidth;
-    RsGlobal->MaximumHeight = pParams->BackBufferHeight;
-
-    bRequestFullMode = false;
-
-    RECT rcClient = { 0, 0, pParams->BackBufferWidth, pParams->BackBufferHeight };
-
-    AdjustWindowRectEx(&rcClient, dwWndStyle, FALSE, GetWindowLong(*hGameWnd, GWL_EXSTYLE));
-
-    int nClientWidth = rcClient.right - rcClient.left;
-    int nClientHeight = rcClient.bottom - rcClient.top;
-
-    bOldRecursion = bStopRecursion;
-    bStopRecursion = true;
-
-    SetWindowLong(*hGameWnd, GWL_STYLE, dwWndStyle);
-    SetMenu(*hGameWnd, NULL);
-
-    nClientWidth = min(nClientWidth, nMonitorWidth);
-    nClientHeight = min(nClientHeight, nMonitorHeight);
-
-    SetWindowPos(*hGameWnd, HWND_NOTOPMOST, 0, 0, nClientWidth, nClientHeight, SWP_NOACTIVATE);
-
-    bStopRecursion = bOldRecursion;
-
-    pParams->hDeviceWindow = *hGameWnd;
-    bResChanged = true;
-}
 
 void CDxHandler::ToggleFullScreen(void)
 {
@@ -307,54 +163,7 @@ void CDxHandler::AdjustGameToWindowSize(void)
     // Ta funkcja nie jest już potrzebna, ponieważ nie obsługujemy dynamicznej zmiany rozmiaru okna
 }
 
-void CDxHandler::MainCameraRebuildRaster(RwCamera* pCamera)
-{
-    if (pCamera == *pRenderCamera)
-    {
-        IDirect3DSurface8* pSurface;
-        D3DSURFACE_DESC stSurfaceDesc;
 
-        (*pDirect3DDevice)->GetBackBuffer(0, D3DBACKBUFFER_TYPE_MONO, &pSurface);
-        pSurface->GetDesc(&stSurfaceDesc);
-        pSurface->Release();
-
-        int nModeIndex = RwEngineGetCurrentVideoMode();
-
-        if ((*CDxHandler::pDisplayModes)[nModeIndex].nWidth != (int)stSurfaceDesc.Width || (*CDxHandler::pDisplayModes)[nModeIndex].nHeight != (int)stSurfaceDesc.Height)
-        {
-            (*CDxHandler::pDisplayModes)[nModeIndex].nWidth = (int)stSurfaceDesc.Width;
-            (*CDxHandler::pDisplayModes)[nModeIndex].nHeight = (int)stSurfaceDesc.Height;
-        }
-
-        int nGameWidth = (*CDxHandler::pDisplayModes)[nModeIndex].nWidth;
-        int nGameHeight = (*CDxHandler::pDisplayModes)[nModeIndex].nHeight;
-
-        *(int*)RwD3D8AdapterInformation_DisplayMode = nGameWidth;
-        *(int*)(RwD3D8AdapterInformation_DisplayMode + 4) = nGameHeight;
-
-        if (pCamera->frameBuffer && (pCamera->frameBuffer->nWidth != nGameWidth || pCamera->frameBuffer->nHeight != nGameHeight))
-        {
-            RwRasterDestroy(pCamera->frameBuffer);
-            pCamera->frameBuffer = NULL;
-        }
-
-        if (!pCamera->frameBuffer)
-        {
-            pCamera->frameBuffer = RwRasterCreate(nGameWidth, nGameHeight, 32, rwRASTERTYPECAMERA);
-        }
-
-        if (pCamera->zBuffer && (pCamera->zBuffer->nWidth != nGameWidth || pCamera->zBuffer->nHeight != nGameHeight))
-        {
-            RwRasterDestroy(pCamera->zBuffer);
-            pCamera->zBuffer = NULL;
-        }
-
-        if (!pCamera->zBuffer)
-        {
-            pCamera->zBuffer = RwRasterCreate(nGameWidth, nGameHeight, 0, rwRASTERTYPEZBUFFER);
-        }
-    }
-}
 
 void CDxHandler::ActivateGameMouse(void)
 {
@@ -422,35 +231,11 @@ LRESULT APIENTRY CDxHandler::MvlWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
     return CallWindowProc(wndProcOld, hwnd, uMsg, wParam, lParam);
 }
 
-HRESULT __stdcall ResetSA(LPDIRECT3DDEVICE8 pDevice, D3DPRESENT_PARAMETERS_D3D9* pPresentationParameters) {
-    return CDxHandler::HandleReset(pPresentationParameters, nullptr);
-}
 
-HRESULT __stdcall SetViewport(LPDIRECT3DDEVICE8 pDevice, CONST D3DVIEWPORT8* pViewport) {
-    bool bInitialLock = CDxHandler::bChangingLocked;
 
-    if (!bInitialLock) CDxHandler::StoreRestoreWindowInfo(false);
-    HRESULT hres = CDxHandler::oldSetViewport(*CDxHandler::pDirect3DDevice, pViewport);
-    if (!bInitialLock) CDxHandler::StoreRestoreWindowInfo(true);
 
-    return hres;
-}
 
-void CDxHandler::Direct3DDeviceReplaceSA(void)
-{
-    if (*pDirect3DDevice != NULL)
-    {
-        UINT_PTR* pVTable = (UINT_PTR*)(*((UINT_PTR*)*pDirect3DDevice));
-        if (!oldReset)
-        {
-            oldReset = (HRESULT(__stdcall*)(LPDIRECT3DDEVICE8 pDevice, void* pPresentationParameters))(*(uint32_t*)&pVTable[16]);
-            oldSetViewport = (HRESULT(__stdcall*)(LPDIRECT3DDEVICE8 pDevice, CONST D3DVIEWPORT8 * pViewport))(*(uint32_t*)&pVTable[47]);
-        }
 
-        injector::WriteMemory(&pVTable[16], &ResetSA, true);
-        injector::WriteMemory(&pVTable[47], &SetViewport, true);
-    }
-}
 
 void CDxHandler::InjectWindowProc(void)
 {
@@ -577,38 +362,215 @@ int CDxHandler::ProcessMouseState(void)
     return 1;
 }
 
-void __declspec(naked) CDxHandler::HookDirect3DDeviceReplacerSA(void)
+// Ta funkcja zastępuje stary, szablonowy AdjustPresentParams
+// Używa natywnych typów D3D9 i poprawnych nazw pól
+void CDxHandler::AdjustPresentParams_D3D9(D3DPRESENT_PARAMETERS* pParams)
 {
-    static HRESULT hRes;
-    static bool bOldRecursion;
-    static bool bOldLocked;
+    // --- START OF CONFIGURATION ---
 
-    _asm pushad
+    // 1. Zawsze wymuś tryb okienkowy (borderless)
+    pParams->Windowed = TRUE;
 
-    bOldRecursion = bStopRecursion;
+    // 2. Zastosuj ustawienia z .ini (tylko jeśli nie są -1)
+    if (ini_BackBufferFormat != -1)
+        pParams->BackBufferFormat = (D3DFORMAT)ini_BackBufferFormat;
+
+    if (ini_EnableAutoDepthStencil != -1)
+        pParams->EnableAutoDepthStencil = (BOOL)ini_EnableAutoDepthStencil;
+
+    if (ini_AutoDepthStencilFormat != -1)
+        pParams->AutoDepthStencilFormat = (D3DFORMAT)ini_AutoDepthStencilFormat;
+
+    if (ini_BackBufferCount != -1)
+        pParams->BackBufferCount = ini_BackBufferCount;
+
+    if (ini_MultiSampleType != -1)
+        pParams->MultiSampleType = (D3DMULTISAMPLE_TYPE)ini_MultiSampleType;
+
+    if (ini_MultiSampleQuality != -1)
+        pParams->MultiSampleQuality = ini_MultiSampleQuality;
+
+    if (ini_SwapEffect != -1)
+        pParams->SwapEffect = (D3DSWAPEFFECT)ini_SwapEffect;
+
+    if (ini_PresentationInterval != -1)
+    {
+        // Poprawna nazwa pola w D3D9
+        pParams->PresentationInterval = ini_PresentationInterval;
+    }
+
+    if (ini_RefreshRateInHz != -1)
+    {
+        // Poprawna nazwa pola w D3D9 (ale ignorowana w trybie okienkowym)
+        pParams->FullScreen_RefreshRateInHz = ini_RefreshRateInHz;
+    }
+
+    if (ini_Flags != -1)
+        pParams->Flags = ini_Flags;
+
+    // 3. Zabezpieczenie dla MSAA
+    if (pParams->MultiSampleType > 0)
+        pParams->SwapEffect = D3DSWAPEFFECT_DISCARD;
+
+    // --- END OF CONFIGURATION ---
+
+
+    // --- BORDERLESS FULLSCREEN LOGIC ---
+    DWORD dwWndStyle = GetWindowLong(*hGameWnd, GWL_STYLE);
+    auto [nMonitorWidth, nMonitorHeight] = GetDesktopRes();
+
+    dwWndStyle &= ~WS_OVERLAPPEDWINDOW;
+    pParams->BackBufferWidth = nMonitorWidth;
+    pParams->BackBufferHeight = nMonitorHeight;
+    bFullMode = true;
+    bUseBorder = false;
+    bUseMenus = false;
+
+    nCurrentWidth = (int)pParams->BackBufferWidth;
+    nCurrentHeight = (int)pParams->BackBufferHeight;
+
+    if (RsGlobal) // Sprawdzenie, czy RsGlobal zostało znalezione
+    {
+        RsGlobal->MaximumWidth = pParams->BackBufferWidth;
+        RsGlobal->MaximumHeight = pParams->BackBufferHeight;
+    }
+
+    bRequestFullMode = false;
+    RECT rcClient = { 0, 0, pParams->BackBufferWidth, pParams->BackBufferHeight };
+    AdjustWindowRectEx(&rcClient, dwWndStyle, FALSE, GetWindowLong(*hGameWnd, GWL_EXSTYLE));
+
+    int nClientWidth = rcClient.right - rcClient.left;
+    int nClientHeight = rcClient.bottom - rcClient.top;
+
+    bool bOldRecursion = bStopRecursion;
     bStopRecursion = true;
 
-    InjectWindowProc();
-    AdjustPresentParams((D3DPRESENT_PARAMETERS_D3D9*)HookParams);
+    SetWindowLong(*hGameWnd, GWL_STYLE, dwWndStyle);
+    SetMenu(*hGameWnd, NULL);
+    nClientWidth = min(nClientWidth, nMonitorWidth);
+    nClientHeight = min(nClientHeight, nMonitorHeight);
+    SetWindowPos(*hGameWnd, HWND_NOTOPMOST, 0, 0, nClientWidth, nClientHeight, SWP_NOACTIVATE);
 
-    bOldLocked = bChangingLocked;
-    if (!bOldLocked) StoreRestoreWindowInfo(false); // <-- Poprawiona spacja
-    RemoveWindowProc();
-    bChangingLocked = true;
-
-    _asm popad
-    _asm call[edx + 40h]
-        _asm mov hRes, eax
-    _asm pushad
-
-    bChangingLocked = bOldLocked;
-    InjectWindowProc();
-    if (!bOldLocked) StoreRestoreWindowInfo(true); // <-- Poprawiona spacja
-
-    Direct3DDeviceReplaceSA();
     bStopRecursion = bOldRecursion;
 
-    _asm popad
-    _asm test eax, eax
-    _asm jmp HookDirect3DDeviceReplacerJmp
+    pParams->hDeviceWindow = *hGameWnd;
+    bResChanged = true;
+}
+
+
+// ===== NOWY MECHANIZM HAKUJĄCY =====
+
+// Krok 3: Nasz hak na Reset()
+HRESULT STDMETHODCALLTYPE CDxHandler::Hook_Reset(IDirect3DDevice9* pDevice, D3DPRESENT_PARAMETERS* pPresentationParameters)
+{
+    // Uruchom naszą logikę przed wywołaniem oryginalnego Reset
+    if (bWindowed)
+    {
+        AdjustPresentParams_D3D9(pPresentationParameters);
+    }
+
+    bool bInitialLocked = bChangingLocked;
+    if (!bInitialLocked) StoreRestoreWindowInfo(false);
+
+    // Wywołaj oryginalny Reset
+    HRESULT hRes = original_Reset(pDevice, pPresentationParameters);
+
+    if (!bInitialLocked) StoreRestoreWindowInfo(true);
+
+    if (SUCCEEDED(hRes))
+    {
+        // Zaktualizuj szerokość/wysokość w grze
+        int nModeIndex = RwEngineGetCurrentVideoMode();
+        (*pDisplayModes)[nModeIndex].nWidth = pPresentationParameters->BackBufferWidth;
+        (*pDisplayModes)[nModeIndex].nHeight = pPresentationParameters->BackBufferHeight;
+
+        bResChanged = true; // Ustaw flagę, aby ProcessMouseState mogło zadziałać
+    }
+
+    return hRes;
+}
+
+// Krok 2: Nasz hak na CreateDevice()
+HRESULT STDMETHODCALLTYPE CDxHandler::Hook_CreateDevice(IDirect3D9* pD3D, UINT Adapter, D3DDEVTYPE DeviceType, HWND hFocusWindow, DWORD BehaviorFlags, D3DPRESENT_PARAMETERS* pPresentationParameters, IDirect3DDevice9** ppReturnedDeviceInterface)
+{
+    // Wstrzyknij naszą procedurę okna, zanim urządzenie zostanie utworzone
+    InjectWindowProc();
+
+    // Uruchom naszą logikę na parametrach *przed* utworzeniem urządzenia
+    if (bWindowed)
+    {
+        AdjustPresentParams_D3D9(pPresentationParameters);
+    }
+
+    // Wywołaj oryginalne CreateDevice
+    HRESULT hRes = original_CreateDevice(pD3D, Adapter, DeviceType, hFocusWindow, BehaviorFlags, pPresentationParameters, ppReturnedDeviceInterface);
+
+    if (SUCCEEDED(hRes))
+    {
+        // Udało się! Mamy wskaźnik na urządzenie (*ppReturnedDeviceInterface)
+        // Teraz możemy zahakować jego V-Table, aby złapać Reset()
+
+        IDirect3DDevice9* pDevice = *ppReturnedDeviceInterface;
+        UINT_PTR* pVTable = (UINT_PTR*)(*((UINT_PTR*)pDevice));
+
+        // Zapisz oryginalny wskaźnik na Reset
+        original_Reset = (Reset_t)pVTable[16];
+
+        // Nadpisz wskaźnik w V-Table naszym własnym
+        bool bOldRecursion = bStopRecursion;
+        bStopRecursion = true;
+        injector::WriteMemory(&pVTable[16], &Hook_Reset, true);
+        bStopRecursion = bOldRecursion;
+    }
+
+    return hRes;
+}
+
+// Krok 1: Nasz hak na Direct3DCreate9()
+IDirect3D9* WINAPI CDxHandler::Hook_Direct3DCreate9(UINT SDKVersion)
+{
+    // Wywołaj oryginalną funkcję, aby uzyskać prawdziwy obiekt IDirect3D9
+    IDirect3D9* pD3D = original_Direct3DCreate9(SDKVersion);
+
+    if (pD3D)
+    {
+        // Udało się! Mamy "fabrykę".
+        // Teraz hakujemy jej V-Table, aby złapać CreateDevice()
+
+        UINT_PTR* pVTable = (UINT_PTR*)(*((UINT_PTR*)pD3D));
+
+        // Zapisz oryginalny wskaźnik na CreateDevice (indeks 16)
+        original_CreateDevice = (CreateDevice_t)pVTable[16];
+
+        // Nadpisz wskaźnik w V-Table naszym własnym
+        bool bOldRecursion = bStopRecursion;
+        bStopRecursion = true;
+        injector::WriteMemory(&pVTable[16], &Hook_CreateDevice, true);
+        bStopRecursion = bOldRecursion;
+    }
+
+    return pD3D;
+}
+
+// Nowy punkt wejścia, który uruchomi cały proces
+void CDxHandler::InstallD3D9Hook(void)
+{
+    // Znajdź adres Direct3DCreate9 w importach gry
+    // To jest najbardziej uniwersalna metoda
+    HMODULE hD3D9 = GetModuleHandleA("d3d9.dll");
+    if (!hD3D9)
+    {
+        hD3D9 = LoadLibraryA("d3d9.dll");
+    }
+
+    if (hD3D9)
+    {
+        original_Direct3DCreate9 = (Direct3DCreate9_t)GetProcAddress(hD3D9, "Direct3DCreate9");
+        if (original_Direct3DCreate9)
+        {
+            // Hookuj globalny punkt wejścia
+            injector::MakeCALL(original_Direct3DCreate9, Hook_Direct3DCreate9, true);
+        }
+    }
+
 }

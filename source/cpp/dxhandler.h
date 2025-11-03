@@ -1,18 +1,50 @@
-#pragma once
+﻿#pragma once
+
+// KROK 1: Dołącz prawdziwe D3D9 JAKO PIERWSZE.
+// To rozwiąże błędy konfliktu z D3D8.
+#include <d3d9.h>
+#include <d3d9types.h>
+#define DIRECTINPUT_VERSION 0x0800
+#include <dinput.h>
+// KROK 2: Dołącz resztę swoich zależności
 #include "misc.h"
+
+// Definicje typów dla naszych wskaźników na oryginalne funkcje
+// Teraz kompilator wie, czym jest IDirect3D9 i IDirect3DDevice9
+typedef IDirect3D9* (WINAPI* Direct3DCreate9_t)(UINT SDKVersion);
+typedef HRESULT(STDMETHODCALLTYPE* CreateDevice_t)(IDirect3D9* pD3D, UINT Adapter, D3DDEVTYPE DeviceType, HWND hFocusWindow, DWORD BehaviorFlags, D3DPRESENT_PARAMETERS* pPresentationParameters, IDirect3DDevice9** ppReturnedDeviceInterface);
+typedef HRESULT(STDMETHODCALLTYPE* Reset_t)(IDirect3DDevice9* pDevice, D3DPRESENT_PARAMETERS* pPresentationParameters);
+
+
+
 
 class CDxHandler
 {
 public:
-    template<class D3D_TYPE>
-    static HRESULT HandleReset(D3D_TYPE* pPresentationParameters, void* pSourceAddress = 0);
-    template<class D3D_TYPE>
-    static void AdjustPresentParams(D3D_TYPE* pParams);
+    // --- NOWY MECHANIZM HAKUJĄCY D3D9 ---
+    static void InstallD3D9Hook(void); // Nowy punkt wejścia
+    static IDirect3D9* WINAPI Hook_Direct3DCreate9(UINT SDKVersion);
+    static HRESULT STDMETHODCALLTYPE Hook_CreateDevice(IDirect3D9* pD3D, UINT Adapter, D3DDEVTYPE DeviceType, HWND hFocusWindow, DWORD BehaviorFlags, D3DPRESENT_PARAMETERS* pPresentationParameters, IDirect3DDevice9** ppReturnedDeviceInterface);
+    static HRESULT STDMETHODCALLTYPE Hook_Reset(IDirect3DDevice9* pDevice, D3DPRESENT_PARAMETERS* pPresentationParameters);
+
+    // Wskaźniki na oryginalne funkcje
+    static Direct3DCreate9_t original_Direct3DCreate9;
+    static CreateDevice_t    original_CreateDevice;
+    static Reset_t           original_Reset;
+
+    // Nowa, natywna funkcja AdjustParams dla D3D9
+    static void AdjustPresentParams_D3D9(D3DPRESENT_PARAMETERS* pParams);
+
+
+    // --- USUNIĘTE STARE FUNKCJE ---
+    // HandleReset, AdjustPresentParams<template>, Direct3DDeviceReplace,
+    // Direct3DDeviceReplaceSA, HookDirect3DDeviceReplacer, HookDirect3DDeviceReplacerSA,
+    // ResetSA, oldReset, oldSetViewport, SetViewport
+
+    // --- Zachowane funkcje pomocnicze ---
     static void ToggleFullScreen(void);
     static void StoreRestoreWindowInfo(bool bRestore);
     static void AdjustGameToWindowSize(void);
-    static void MainCameraRebuildRaster(RwCamera* pCamera);
-    static void Direct3DDeviceReplaceSA(void);
     static void InjectWindowProc(void);
     static void RemoveWindowProc(void);
     static void ActivateGameMouse(void);
@@ -20,47 +52,26 @@ public:
     static void DxInputCreateDevice(bool bExclusive);
     static bool IsCursorInClientRect(void);
     static int ProcessMouseState(void);
-    static void HookDirect3DDeviceReplacerSA(void);
-    static void SetupHooksSA(void);
     static void ProcessIni(void);
-    static HRESULT(__stdcall* oldReset)(LPDIRECT3DDEVICE8 pDevice, void* pPresentationParameters);
-    static HRESULT(__stdcall* oldSetViewport)(LPDIRECT3DDEVICE8 pDevice, CONST D3DVIEWPORT8* pViewport);
 
-    static bool bIsInputExclusive;
-    static bool bCursorStatus;
-    static bool bGameMouseInactive;
-    static bool bCtrlAltLastState;
-    static bool bAltEnterLastState;
-    static bool bShiftEnterLastState;
-    static bool bCtrlEnterLastState;
-
-
-
+    // --- Zmienne statyczne (w większości bez zmian) ---
+    static int nResetCounter;
     static int nCurrentWidth, nCurrentHeight;
-    static int nNonFullWidth, nNonFullHeight, nNonFullPosX, nNonFullPosY;
     static bool bFullMode, bRequestFullMode, bRequestNoBorderMode;
     static bool bChangingLocked;
+    static HMENU hMenuWindows;
+    static WNDPROC wndProcOld;
+    static bool bIsInputExclusive;
+    static bool bGameMouseInactive;
+    static bool bStopRecursion;
     static bool bSizingLoop;
 
-    static IDirect3D8** pIntDirect3DMain;
-    static IDirect3DDevice8** pDirect3DDevice;
+    // Te wskaźniki z gry mogą nadal być potrzebne do innych funkcji, więc je zostawiamy
     static GameDxInput** pInputData;
     static bool* bMenuVisible;
     static HWND* hGameWnd;
-
-    static int nResetCounter;
-
-    static HMENU hMenuWindows;
-
-    static bool bNeedsInitialSwitch;
-
-    static WNDPROC wndProcOld;
-
     static DisplayMode** pDisplayModes;
-    static bool bStopRecursion;
 
-    static SHELLEXECUTEINFOA ShExecInfo;
-    static char lpWindowName[MAX_PATH];
     static void(*CPostEffectsDoScreenModeDependentInitializations)();
     static void(*CPostEffectsSetupBackBufferVertex)();
     static void(*CMBlurMotionBlurOpen)(RwCamera*);
@@ -75,20 +86,16 @@ public:
     static RsGlobalType* RsGlobal;
     static uint32_t RwD3D8AdapterInformation_DisplayMode;
     static uint32_t CamCol;
-    static uint32_t HookParams;
-    static uint32_t HookDirect3DDeviceReplacerJmp;
+
     static bool bInGameSA;
     static bool bResChanged;
     static bool bWindowed;
     static bool bUseMenus;
     static bool bUseBorder;
+    static SHELLEXECUTEINFOA ShExecInfo;
+    static char lpWindowName[MAX_PATH];
 
-    static bool bRequestWindowedMode;
-    static bool bDisableHotkeys;
-
-
-
-    //ini
+    // Zmienne konfiguracyjne INI
     static int ini_BackBufferFormat;
     static int ini_EnableAutoDepthStencil;
     static int ini_AutoDepthStencilFormat;

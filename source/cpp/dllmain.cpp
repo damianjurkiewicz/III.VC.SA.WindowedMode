@@ -1,19 +1,22 @@
-#include "dxhandler.h"
+﻿#include "dxhandler.h"
 
 BOOL APIENTRY DllMain(HMODULE /*hModule*/, DWORD reason, LPVOID /*lpReserved*/)
 {
 	if (reason == DLL_PROCESS_ATTACH)
 	{
-		CDxHandler::ProcessIni();
+		// Sprawdź, czy to San Andreas
+		if (injector::address_manager::singleton().IsSA())
+		{
+			// 1. Ustaw flagę, że jesteśmy w SA (jeśli jej używasz)
+			CDxHandler::bInGameSA = true;
 
-		
-		
-				if (injector::address_manager::singleton().IsSA())
-				{
-					CDxHandler::SetupHooksSA();
-				}
-			
-		
+			// 2. Wczytaj konfigurację z pliku WindowedMode.ini
+			CDxHandler::ProcessIni();
+
+			// 3. Zainstaluj nasz nowy, uniwersalny hak D3D9
+			// To zastępuje stare wywołanie CDxHandler::SetupHooksSA();
+			CDxHandler::InstallD3D9Hook();
+		}
 	}
 
 	if (reason == DLL_PROCESS_DETACH)
