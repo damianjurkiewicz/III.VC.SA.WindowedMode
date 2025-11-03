@@ -1,6 +1,6 @@
 #include "dxhandler.h"
 
-const bool FORCE_FULLSCREEN_MODE = false;
+const bool FORCE_FULLSCREEN_MODE = true;
 
 CIniReader iniReader("");
 
@@ -119,15 +119,18 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
 
     pParams->Windowed = TRUE;
 
+
+
     pParams->FullScreen_PresentationInterval = 0;
     pParams->FullScreen_RefreshRateInHz = 0;
     pParams->EnableAutoDepthStencil = TRUE;
-    pParams->BackBufferFormat = D3DFMT_X8R8G8B8;
+   
+    //pParams->BackBufferFormat = D3DFMT_X8R8G8B8;
 
-    if (bInGameSA)
-    {
-        pParams->BackBufferFormat = D3DFMT_A8R8G8B8;
-    }
+   // if (bInGameSA)
+  //  {
+  //      pParams->BackBufferFormat = D3DFMT_A8R8G8B8;
+  //  }
 
     //pParams->MultiSampleType = (D3DMULTISAMPLE_TYPE)8;
 
@@ -183,7 +186,8 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
     bRequestWindowedMode = false;
 
     RECT rcClient = { 0, 0, pParams->BackBufferWidth, pParams->BackBufferHeight };
-    AdjustWindowRectEx(&rcClient, dwWndStyle, hMenuSet != NULL, GetWindowLong(*hGameWnd, GWL_EXSTYLE));
+    
+    (&rcClient, dwWndStyle, hMenuSet != NULL, GetWindowLong(*hGameWnd, GWL_EXSTYLE));
 
     int nClientWidth = rcClient.right - rcClient.left;
     int nClientHeight = rcClient.bottom - rcClient.top;
@@ -233,10 +237,10 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
 
     bStopRecursion = bOldRecursion;
 
-  //  GetClientRect(*hGameWnd, &rcClient);
+    GetClientRect(*hGameWnd, &rcClient);
 
-  //  pParams->BackBufferWidth = rcClient.right;
-   // pParams->BackBufferHeight = rcClient.bottom;
+    pParams->BackBufferWidth = rcClient.right;
+    pParams->BackBufferHeight = rcClient.bottom;
     pParams->hDeviceWindow = *hGameWnd;
     bResChanged = true;
 
