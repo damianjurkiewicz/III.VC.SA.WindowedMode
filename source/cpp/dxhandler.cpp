@@ -1,4 +1,4 @@
-#include "dxhandler.h"
+﻿#include "dxhandler.h"
 
 const bool FORCE_FULLSCREEN_MODE = true;
 
@@ -6,10 +6,10 @@ CIniReader iniReader("");
 
 int CDxHandler::nResetCounter = 0;
 int CDxHandler::nCurrentWidth = 0, CDxHandler::nCurrentHeight = 0;
-int CDxHandler::nNonFullWidth = 600, CDxHandler::nNonFullHeight = 450, CDxHandler::nNonFullPosX = -1, CDxHandler::nNonFullPosY = -1;
+// Usunięto zmienne nNonFull...
 bool CDxHandler::bFullMode = false, CDxHandler::bRequestFullMode = false, CDxHandler::bRequestNoBorderMode = false;
 bool CDxHandler::bChangingLocked = false;
-HMENU CDxHandler::hMenuWindows = NULL;
+HMENU CDxHandler::hMenuWindows = NULL; // Pozostawione na wszelki wypadek, ale nieużywane
 WNDPROC CDxHandler::wndProcOld = NULL;
 bool CDxHandler::bIsInputExclusive = false;
 bool CDxHandler::bGameMouseInactive = false;
@@ -22,7 +22,7 @@ bool* CDxHandler::bMenuVisible;
 HWND* CDxHandler::hGameWnd;
 DisplayMode** CDxHandler::pDisplayModes;
 
-bool CDxHandler::bRequestWindowedMode = false;
+// Usunięto bRequestWindowedMode
 
 HRESULT(__stdcall* CDxHandler::oldReset)(LPDIRECT3DDEVICE8 pDevice, void* pPresentationParameters);
 HRESULT(__stdcall* CDxHandler::oldSetViewport)(LPDIRECT3DDEVICE8 pDevice, CONST D3DVIEWPORT8* pViewport);
@@ -45,8 +45,8 @@ bool* CDxHandler::bBlurOn;
 bool CDxHandler::bInGameSA = false;
 bool CDxHandler::bResChanged = false;
 bool CDxHandler::bWindowed = true;
-bool CDxHandler::bUseMenus = true;
-bool CDxHandler::bUseBorder = true;
+bool CDxHandler::bUseMenus = true; // Ustawiane na false w AdjustPresentParams
+bool CDxHandler::bUseBorder = true; // Ustawiane na false w AdjustPresentParams
 SHELLEXECUTEINFOA CDxHandler::ShExecInfo = { 0 };
 char CDxHandler::lpWindowName[MAX_PATH];
 
@@ -75,8 +75,9 @@ void SetCursorVisible(bool state)
 
 void CDxHandler::ProcessIni(void)
 {
-    bUseMenus = true;
-    bUseBorder = true;
+    // Ta funkcja nie jest już potrzebna, ponieważ wymuszamy tryb pełnoekranowy
+    // bUseMenus = true;
+    // bUseBorder = true;
 }
 
 template<class D3D_TYPE>
@@ -121,17 +122,16 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
 
 
 
+    pParams->BackBufferFormat = D3DFMT_UNKNOWN;
+    pParams->EnableAutoDepthStencil = TRUE;
+    //pParams->AutoDepthStencilFormat = D3DFMT_D16;
+    //pParams->BackBufferCount = 1;
+   // pParams->MultiSampleType = D3DMULTISAMPLE_NONE;
+    pParams->SwapEffect = D3DSWAPEFFECT_DISCARD;
     pParams->FullScreen_PresentationInterval = 0;
     pParams->FullScreen_RefreshRateInHz = 0;
     pParams->EnableAutoDepthStencil = TRUE;
-   
     //pParams->BackBufferFormat = D3DFMT_X8R8G8B8;
-
-   // if (bInGameSA)
-  //  {
-  //      pParams->BackBufferFormat = D3DFMT_A8R8G8B8;
-  //  }
-
     //pParams->MultiSampleType = (D3DMULTISAMPLE_TYPE)8;
 
     if (pParams->MultiSampleType > 0) {
@@ -141,53 +141,33 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
     DWORD dwWndStyle = GetWindowLong(*hGameWnd, GWL_STYLE);
 
     auto [nMonitorWidth, nMonitorHeight] = GetDesktopRes();
-    HMENU hMenuSet = NULL;
+    // HMENU hMenuSet = NULL; // Usunięto
 
-    if (FORCE_FULLSCREEN_MODE)
-    {
-        dwWndStyle &= ~WS_OVERLAPPEDWINDOW;
-        pParams->BackBufferWidth = nMonitorWidth;
-        pParams->BackBufferHeight = nMonitorHeight;
-        bFullMode = true;
-        bUseBorder = false;
-        bUseMenus = false;
-    }
-    else
-    {
+    // Zawsze wymuszaj tryb pełnoekranowy
+    dwWndStyle &= ~WS_OVERLAPPEDWINDOW;
+    pParams->BackBufferWidth = nMonitorWidth;
+    pParams->BackBufferHeight = nMonitorHeight;
+    bFullMode = true;
+    bUseBorder = false;
+    bUseMenus = false;
 
-        pParams->BackBufferWidth = nNonFullWidth;  // Powinno by 600
-        pParams->BackBufferHeight = nNonFullHeight; // Powinno by450
-
-
-        bUseBorder = true;
-        bUseMenus = true;
-
-        dwWndStyle |= WS_OVERLAPPEDWINDOW;
-        hMenuSet = bUseMenus ? hMenuWindows : NULL;
-        bFullMode = false;
-    }
+    // Usunięto blok 'else' dla trybu okienkowego
 
     nCurrentWidth = (int)pParams->BackBufferWidth;
     nCurrentHeight = (int)pParams->BackBufferHeight;
 
-
-    // if (nCurrentWidth <= 0 || nCurrentHeight <= 0)
-    // {
-    //    nCurrentWidth = nNonFullWidth;
-    //    nCurrentHeight = nNonFullHeight;
-    //    pParams->BackBufferWidth = nCurrentWidth;
-    //    pParams->BackBufferHeight = nCurrentHeight;
-    // }
+    // Usunięto sprawdzanie 'if (nCurrentWidth <= 0 ...)'
 
     RsGlobal->MaximumWidth = pParams->BackBufferWidth;
     RsGlobal->MaximumHeight = pParams->BackBufferHeight;
 
     bRequestFullMode = false;
-    bRequestWindowedMode = false;
+    // bRequestWindowedMode = false; // Usunięto
 
     RECT rcClient = { 0, 0, pParams->BackBufferWidth, pParams->BackBufferHeight };
-    
-    (&rcClient, dwWndStyle, hMenuSet != NULL, GetWindowLong(*hGameWnd, GWL_EXSTYLE));
+
+    // Poprawiono błąd składniowy i usunięto hMenuSet
+    AdjustWindowRectEx(&rcClient, dwWndStyle, FALSE, GetWindowLong(*hGameWnd, GWL_EXSTYLE));
 
     int nClientWidth = rcClient.right - rcClient.left;
     int nClientHeight = rcClient.bottom - rcClient.top;
@@ -196,55 +176,24 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
     bStopRecursion = true;
 
     SetWindowLong(*hGameWnd, GWL_STYLE, dwWndStyle);
-    SetMenu(*hGameWnd, hMenuSet);
+    SetMenu(*hGameWnd, NULL); // Zawsze usuwaj menu
 
-    if (hMenuSet)
-    {
-        rcClient.bottom = 0x7FFF;
-        SendMessage(*hGameWnd, WM_NCCALCSIZE, FALSE, (LPARAM)&rcClient);
-        nClientHeight += rcClient.top;
-    }
+    // Usunięto 'if (hMenuSet)'
 
     nClientWidth = min(nClientWidth, nMonitorWidth);
     nClientHeight = min(nClientHeight, nMonitorHeight);
 
-    if (!bFullMode)
-    {
-        nNonFullWidth = nCurrentWidth;
-        nNonFullHeight = nCurrentHeight;
+    // Usunięto blok 'if (!bFullMode)'
 
-        static bool bFirstTime = true;
-        if (bFirstTime)
-        {
-            nNonFullPosX = (nMonitorWidth - nClientWidth) / 2;
-            nNonFullPosY = (nMonitorHeight - nClientHeight) / 2;
-            bFirstTime = false;
-        }
-        else
-        {
-            RECT rcWindow;
-            GetWindowRect(*hGameWnd, &rcWindow);
-            nNonFullPosX = rcWindow.left;
-            nNonFullPosY = rcWindow.top;
-        }
-
-        SetWindowPos(*hGameWnd, HWND_NOTOPMOST, nNonFullPosX, nNonFullPosY, nClientWidth, nClientHeight, SWP_NOACTIVATE);
-    }
-    else // full screen
-    {
-        SetWindowPos(*hGameWnd, HWND_NOTOPMOST, 0, 0, nClientWidth, nClientHeight, SWP_NOACTIVATE);
-    }
+    // Zawsze pozycjonuj okno na 0,0 (tryb pełnoekranowy)
+    SetWindowPos(*hGameWnd, HWND_NOTOPMOST, 0, 0, nClientWidth, nClientHeight, SWP_NOACTIVATE);
 
     bStopRecursion = bOldRecursion;
 
-    GetClientRect(*hGameWnd, &rcClient);
+    // Usunięto blok GetClientRect i nadpisywanie pParams->... (naprawa błędu)
 
-    pParams->BackBufferWidth = rcClient.right;
-    pParams->BackBufferHeight = rcClient.bottom;
     pParams->hDeviceWindow = *hGameWnd;
     bResChanged = true;
-
-
 }
 
 void CDxHandler::ToggleFullScreen(void)
@@ -296,32 +245,7 @@ void CDxHandler::StoreRestoreWindowInfo(bool bRestore)
 
 void CDxHandler::AdjustGameToWindowSize(void)
 {
-    RECT rcClient;
-    GetClientRect(*hGameWnd, &rcClient);
-
-    int nModeIndex = RwEngineGetCurrentVideoMode();
-    if (*pDisplayModes)
-    {
-        bool bSizeChanged = ((*pDisplayModes)[nModeIndex].nWidth != rcClient.right || (*pDisplayModes)[nModeIndex].nHeight != rcClient.bottom);
-
-        if (bSizeChanged) {
-            (*pDisplayModes)[nModeIndex].nWidth = rcClient.right;
-            (*pDisplayModes)[nModeIndex].nHeight = rcClient.bottom;
-
-            RwCameraClear(*pRenderCamera, (void*)CamCol, 2);
-        }
-
-        if (!bFullMode) {
-            RECT rcWindow;
-            GetWindowRect(*hGameWnd, &rcWindow);
-
-            if (rcWindow.left != 0 && rcWindow.top != 0)
-            {
-                nNonFullPosX = rcWindow.left;
-                nNonFullPosY = rcWindow.top;
-            }
-        }
-    }
+    // Ta funkcja nie jest już potrzebna, ponieważ nie obsługujemy dynamicznej zmiany rozmiaru okna
 }
 
 void CDxHandler::MainCameraRebuildRaster(RwCamera* pCamera)
@@ -390,18 +314,13 @@ LRESULT APIENTRY CDxHandler::MvlWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
     case WM_ACTIVATE:
         if (uMsg == WM_KILLFOCUS || wParam == WA_INACTIVE) // focus lost
         {
-            if (!bFullMode && bUseBorder)
-                SetWindowTextA(*hGameWnd, RsGlobal->AppName);
+            // Usunięto 'if (!bFullMode && bUseBorder)'
+            SetWindowTextA(*hGameWnd, RsGlobal->AppName); // Nadal może być przydatne do paska zadań
 
             SetCursorVisible(true);
         }
         break;
-    case WM_LBUTTONUP:
-        if (!*bMenuVisible && IsCursorInClientRect())
-        {
-            ActivateGameMouse();
-        }
-        break;
+        // Usunięto 'case WM_LBUTTONUP'
     case WM_SETCURSOR:
         return DefWindowProc(hwnd, uMsg, wParam, lParam); // restore proper handling of ShowCursor
     case WM_STYLECHANGING:
@@ -431,10 +350,11 @@ LRESULT APIENTRY CDxHandler::MvlWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
             pPosInfo->flags = SWP_NOZORDER | SWP_NOSIZE | SWP_NOREPOSITION | SWP_NOREDRAW | SWP_NOOWNERZORDER | SWP_NOMOVE | SWP_NOACTIVATE;
         }
 
-        if (!bChangingLocked && !bStopRecursion && bWindowed)
-        {
-            AdjustGameToWindowSize();
-        }
+        // Usunięto wywołanie AdjustGameToWindowSize()
+        // if (!bChangingLocked && !bStopRecursion && bWindowed)
+        // {
+        //     AdjustGameToWindowSize();
+        // }
 
         return 0;
     }
@@ -551,11 +471,8 @@ int CDxHandler::ProcessMouseState(void)
     static Fps _fps;
     _fps.update();
 
-    if (!bFullMode && bUseBorder)
-    {
-        sprintf(lpWindowName, "%s | %dx%d @ %d fps", RsGlobal->AppName, RsGlobal->MaximumWidth, RsGlobal->MaximumHeight, _fps.get());
-        SetWindowTextA(*hGameWnd, lpWindowName);
-    }
+    // Usunięto blok 'if (!bFullMode && bUseBorder)' do ustawiania tytułu okna
+    // (nie ma paska tytułowego)
 
     bool bShowCursor = true;
     bool bForeground = (GetForegroundWindow() == *hGameWnd);
