@@ -85,4 +85,17 @@ public:
 
     static bool bRequestWindowedMode;
     static bool bDisableHotkeys;
+
+
+
+    //ini
+    static int ini_BackBufferFormat;
+    static int ini_EnableAutoDepthStencil;
+    static int ini_AutoDepthStencilFormat;
+    static int ini_BackBufferCount;
+    static int ini_MultiSampleType;
+    static int ini_SwapEffect;
+    static int ini_PresentationInterval;
+    static int ini_RefreshRateInHz;
+
 };

@@ -2,7 +2,7 @@
 
 const bool FORCE_FULLSCREEN_MODE = true;
 
-CIniReader iniReader("");
+CIniReader iniReader("WindowedMode.ini");
 
 int CDxHandler::nResetCounter = 0;
 int CDxHandler::nCurrentWidth = 0, CDxHandler::nCurrentHeight = 0;
@@ -50,6 +50,17 @@ bool CDxHandler::bUseBorder = true; // Ustawiane na false w AdjustPresentParams
 SHELLEXECUTEINFOA CDxHandler::ShExecInfo = { 0 };
 char CDxHandler::lpWindowName[MAX_PATH];
 
+
+//ini
+int CDxHandler::ini_BackBufferFormat = -1;
+int CDxHandler::ini_EnableAutoDepthStencil = -1;
+int CDxHandler::ini_AutoDepthStencilFormat = -1;
+int CDxHandler::ini_BackBufferCount = -1;
+int CDxHandler::ini_MultiSampleType = -1;
+int CDxHandler::ini_SwapEffect = -1;
+int CDxHandler::ini_PresentationInterval = -1;
+int CDxHandler::ini_RefreshRateInHz = -1;
+
 std::tuple<int32_t, int32_t> GetDesktopRes()
 {
     HMONITOR monitor = MonitorFromWindow(GetDesktopWindow(), MONITOR_DEFAULTTONEAREST);
@@ -75,9 +86,14 @@ void SetCursorVisible(bool state)
 
 void CDxHandler::ProcessIni(void)
 {
-    // Ta funkcja nie jest już potrzebna, ponieważ wymuszamy tryb pełnoekranowy
-    // bUseMenus = true;
-    // bUseBorder = true;
+    ini_BackBufferFormat = iniReader.ReadInteger("Direct3D", "BackBufferFormat", -1);
+    ini_EnableAutoDepthStencil = iniReader.ReadInteger("Direct3D", "EnableAutoDepthStencil", -1);
+    ini_AutoDepthStencilFormat = iniReader.ReadInteger("Direct3D", "AutoDepthStencilFormat", -1);
+    ini_BackBufferCount = iniReader.ReadInteger("Direct3D", "BackBufferCount", -1);
+    ini_MultiSampleType = iniReader.ReadInteger("Direct3D", "MultiSampleType", -1);
+    ini_SwapEffect = iniReader.ReadInteger("Direct3D", "SwapEffect", -1);
+    ini_PresentationInterval = iniReader.ReadInteger("Direct3D", "PresentationInterval", -1);
+    ini_RefreshRateInHz = iniReader.ReadInteger("Direct3D", "RefreshRateInHz", -1);
 }
 
 template<class D3D_TYPE>
@@ -117,25 +133,63 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
 
     bool bOldRecursion = bStopRecursion;
 
-
+    // --- POCZĄTEK MODYFIKACJI ---
+    // 1. Zawsze wymuszaj tryb okienkowy (borderless)
     pParams->Windowed = TRUE;
 
+    // 2. Zastosuj ustawienia z pliku .ini (tylko jeśli nie są -1)
+    if (ini_BackBufferFormat != -1)
+    {
+        pParams->BackBufferFormat = (D3DFORMAT)ini_BackBufferFormat;
+    }
 
+    if (ini_EnableAutoDepthStencil != -1)
+    {
+        pParams->EnableAutoDepthStencil = (BOOL)ini_EnableAutoDepthStencil;
+    }
 
-    pParams->BackBufferFormat = D3DFMT_UNKNOWN;
-    pParams->EnableAutoDepthStencil = TRUE;
-    //pParams->AutoDepthStencilFormat = D3DFMT_D16;
-    //pParams->BackBufferCount = 1;
-   // pParams->MultiSampleType = D3DMULTISAMPLE_NONE;
-    pParams->SwapEffect = D3DSWAPEFFECT_DISCARD;
-    pParams->FullScreen_PresentationInterval = 0;
-    pParams->FullScreen_RefreshRateInHz = 0;
-    pParams->EnableAutoDepthStencil = TRUE;
-    //pParams->BackBufferFormat = D3DFMT_X8R8G8B8;
-    //pParams->MultiSampleType = (D3DMULTISAMPLE_TYPE)8;
+    if (ini_AutoDepthStencilFormat != -1)
+    {
+        // Ta linia była u Ciebie zakomentowana, ale .ini ją obsłuży
+        pParams->AutoDepthStencilFormat = (D3DFORMAT)ini_AutoDepthStencilFormat;
+    }
 
-    if (pParams->MultiSampleType > 0) {
+    if (ini_BackBufferCount != -1)
+    {
+        pParams->BackBufferCount = ini_BackBufferCount;
+    }
+
+    if (ini_MultiSampleType != -1)
+    {
+        pParams->MultiSampleType = (D3DMULTISAMPLE_TYPE)ini_MultiSampleType;
+    }
+
+    if (ini_SwapEffect != -1)
+    {
+        pParams->SwapEffect = (D3DSWAPEFFECT)ini_SwapEffect;
+    }
+
+    if (ini_PresentationInterval != -1)
+    {
+        pParams->FullScreen_PresentationInterval = ini_PresentationInterval;
+    }
+
+    if (ini_RefreshRateInHz != -1)
+    {
+        pParams->FullScreen_RefreshRateInHz = ini_RefreshRateInHz;
+    }
+
+    // 3. Zabezpieczenie dla MultiSample (zostawiamy, jest ważne)
+    if (pParams->MultiSampleType > 0)
+    {
+        // Jeśli MSAA jest włączone (z gry lub z .ini), wymuś DISCARD
         pParams->SwapEffect = D3DSWAPEFFECT_DISCARD;
+
+        // Możemy też nadpisać wartość z .ini, jeśli jest niekompatybilna
+        if (ini_SwapEffect != -1 && ini_SwapEffect != D3DSWAPEFFECT_DISCARD)
+        {
+            // Opcjonalnie: logowanie błędu, że .ini ma złą kombinację
+        }
     }
 
     DWORD dwWndStyle = GetWindowLong(*hGameWnd, GWL_STYLE);
