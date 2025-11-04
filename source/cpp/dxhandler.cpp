@@ -62,6 +62,8 @@ int CDxHandler::ini_PresentationInterval = -1;
 int CDxHandler::ini_RefreshRateInHz = -1;
 int CDxHandler::ini_MultiSampleQuality = -1;
 int CDxHandler::ini_Flags = -1;
+int CDxHandler::ini_ForcedWidth = -1;
+int CDxHandler::ini_ForcedHeight = -1;
 
 std::tuple<int32_t, int32_t> GetDesktopRes()
 {
@@ -98,6 +100,8 @@ void CDxHandler::ProcessIni(void)
     ini_RefreshRateInHz = iniReader.ReadInteger("Direct3D", "RefreshRateInHz", -1);
     ini_MultiSampleQuality = iniReader.ReadInteger("Direct3D", "MultiSampleQuality", -1);
     ini_Flags = iniReader.ReadInteger("Direct3D", "Flags", -1);
+    ini_ForcedWidth = iniReader.ReadInteger("Resolution", "Width", -1);
+    ini_ForcedHeight = iniReader.ReadInteger("Resolution", "Height", -1);
 }
 
 template<class D3D_TYPE>
@@ -209,16 +213,41 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
     // --- END OF CONFIGURATION ---
 
 
-    // --- BORDERLESS FULLSCREEN LOGIC (No need to edit below) ---
+// --- BORDERLESS FULLSCREEN LOGIC ---
 
     DWORD dwWndStyle = GetWindowLong(*hGameWnd, GWL_STYLE);
 
+    // --- POPRAWIONA LOGIKA ROZDZIELCZOŚCI ---
+
+    // Krok 1: ZAWSZE pobieraj rozdzielczość pulpitu.
+    // Deklarujemy je tutaj, aby były widoczne w całej funkcji.
     auto [nMonitorWidth, nMonitorHeight] = GetDesktopRes();
+
+    int targetWidth, targetHeight;
+    if (ini_ForcedWidth > 0 && ini_ForcedHeight > 0)
+    {
+        // UŻYJ ROZDZIELCZOŚCI Z .INI
+        targetWidth = ini_ForcedWidth;
+        targetHeight = ini_ForcedHeight;
+    }
+    else
+    {
+        // UŻYJ AUTOMATYCZNEJ ROZDZIELCZOŚCI PULPITU
+        targetWidth = nMonitorWidth;
+        targetHeight = nMonitorHeight;
+    }
+    // --- KONIEC POPRAWIONEJ LOGIKI ---
+
+   
+
 
     // Always force borderless fullscreen style
     dwWndStyle &= ~WS_OVERLAPPEDWINDOW;
-    pParams->BackBufferWidth = nMonitorWidth;
-    pParams->BackBufferHeight = nMonitorHeight;
+
+    // Zastosuj wybraną rozdzielczość (automatyczną lub ręczną)
+    pParams->BackBufferWidth = targetWidth;
+    pParams->BackBufferHeight = targetHeight;
+
     bFullMode = true;
     bUseBorder = false;
     bUseMenus = false;

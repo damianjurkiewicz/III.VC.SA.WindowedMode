@@ -100,4 +100,7 @@ public:
     static int ini_RefreshRateInHz;
     static int ini_MultiSampleQuality;
     static int ini_Flags;
+    static int ini_ForcedWidth;
+    static int ini_ForcedHeight;
+ 
 };
