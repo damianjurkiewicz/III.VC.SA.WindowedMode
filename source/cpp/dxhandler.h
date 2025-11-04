@@ -105,5 +105,6 @@ public:
     static int ini_Flags;
     static int ini_ForcedWidth;
     static int ini_ForcedHeight;
+    static int ini_AggressiveMode;
  
 };

@@ -2,7 +2,7 @@
 
 const bool FORCE_FULLSCREEN_MODE = true;
 
-CIniReader iniReader("WindowedMode.ini");
+CIniReader iniReader("COMP.WindowedMode.ini");
 
 int CDxHandler::nResetCounter = 0;
 int CDxHandler::nCurrentWidth = 0, CDxHandler::nCurrentHeight = 0;
@@ -64,6 +64,7 @@ int CDxHandler::ini_MultiSampleQuality = -1;
 int CDxHandler::ini_Flags = -1;
 int CDxHandler::ini_ForcedWidth = -1;
 int CDxHandler::ini_ForcedHeight = -1;
+int CDxHandler::ini_AggressiveMode = 0;
 
 std::tuple<int32_t, int32_t> GetDesktopRes()
 {
@@ -102,6 +103,7 @@ void CDxHandler::ProcessIni(void)
     ini_Flags = iniReader.ReadInteger("Direct3D", "Flags", -1);
     ini_ForcedWidth = iniReader.ReadInteger("Resolution", "Width", -1);
     ini_ForcedHeight = iniReader.ReadInteger("Resolution", "Height", -1);
+    ini_AggressiveMode = iniReader.ReadInteger("Tweaks", "AggressiveBorderless", 0);
 }
 
 template<class D3D_TYPE>
@@ -438,13 +440,22 @@ LRESULT APIENTRY CDxHandler::MvlWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
             SetWindowTextA(*hGameWnd, RsGlobal->AppName); // Nadal może być przydatne do paska zadań
 
             SetCursorVisible(true);
+
+            if (bFullMode)
+            {
+                ShowWindow(*hGameWnd, SW_MINIMIZE);
+            }
+
         }
 
         else if (uMsg == WM_ACTIVATE) // focus GAINED (gra wraca na pierwszy plan)
         {
-            // Agresywnie sprawdź i usuń ramkę, na wypadek
-            // gdyby inny mod ją przywrócił, gdy byliśmy zminimalizowani.
-            EnforceBorderlessStyle();
+            // Sprawdź, czy użytkownik włączył ten tryb w .ini
+            if (ini_AggressiveMode == 1)
+            {
+                // Agresywnie sprawdź i usuń ramkę
+                EnforceBorderlessStyle();
+            }
         }
 
         break;
