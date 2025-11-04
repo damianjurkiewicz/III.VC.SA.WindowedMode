@@ -76,6 +76,7 @@ std::tuple<int32_t, int32_t> GetDesktopRes()
 
 void SetCursorVisible(bool state)
 {
+    // ShowCursor returns state. Use with current visibility to prevent flickering
     CURSORINFO info = { sizeof(CURSORINFO) };
     if (!GetCursorInfo(&info)) return;
     bool currState = ShowCursor(info.flags & CURSOR_SHOWING) >= 0;
@@ -136,8 +137,6 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
 
     bool bOldRecursion = bStopRecursion;
 
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
     // --- START OF CONFIGURATION ---
 
     // 1. Always force windowed (borderless) mode
@@ -160,15 +159,15 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
     }
 
     if (ini_BackBufferCount != -1)
-        
+
     {
         pParams->BackBufferCount = ini_BackBufferCount;
     }
 
-        if (ini_MultiSampleType != -1)
-        {
-            pParams->MultiSampleType = (D3DMULTISAMPLE_TYPE)ini_MultiSampleType;
-        }
+    if (ini_MultiSampleType != -1)
+    {
+        pParams->MultiSampleType = (D3DMULTISAMPLE_TYPE)ini_MultiSampleType;
+    }
 
     // --- NEW ---
     if (ini_MultiSampleQuality != -1)
@@ -211,29 +210,10 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
 
 
     // --- BORDERLESS FULLSCREEN LOGIC (No need to edit below) ---
-=======
-    pParams->Windowed = TRUE;
-=======
-    pParams->Windowed = TRUE;
->>>>>>> Stashed changes
-    pParams->BackBufferFormat = D3DFMT_UNKNOWN;
-    pParams->EnableAutoDepthStencil = TRUE;
-    pParams->AutoDepthStencilFormat = D3DFMT_D16;
-    pParams->BackBufferCount = 1;
-    pParams->MultiSampleType = D3DMULTISAMPLE_NONE;
-    pParams->SwapEffect = D3DSWAPEFFECT_DISCARD;
-    pParams->FullScreen_RefreshRateInHz = 0;
-    pParams->FullScreen_PresentationInterval = 0;
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
 
     DWORD dwWndStyle = GetWindowLong(*hGameWnd, GWL_STYLE);
 
     auto [nMonitorWidth, nMonitorHeight] = GetDesktopRes();
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
 
     // Always force borderless fullscreen style
     dwWndStyle &= ~WS_OVERLAPPEDWINDOW;
@@ -249,49 +229,6 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
     RsGlobal->MaximumWidth = pParams->BackBufferWidth;
     RsGlobal->MaximumHeight = pParams->BackBufferHeight;
 
-=======
-=======
->>>>>>> Stashed changes
-
-    nCurrentWidth = (int)pParams->BackBufferWidth;
-    nCurrentHeight = (int)pParams->BackBufferHeight;
-
-    if (nCurrentWidth <= 0 || nCurrentHeight <= 0)
-    {
-        nCurrentWidth = nNonFullWidth;
-        nCurrentHeight = nNonFullHeight;
-        pParams->BackBufferWidth = nCurrentWidth;
-        pParams->BackBufferHeight = nCurrentHeight;
-    }
-
-    RsGlobal->MaximumWidth = pParams->BackBufferWidth;
-    RsGlobal->MaximumHeight = pParams->BackBufferHeight;
-
-    HMENU hMenuSet = NULL;
-
-    if (FORCE_FULLSCREEN_MODE)
-    {
-        dwWndStyle &= ~WS_OVERLAPPEDWINDOW;
-        pParams->BackBufferWidth = nMonitorWidth;
-        pParams->BackBufferHeight = nMonitorHeight;
-        bFullMode = true;
-        bUseBorder = false;
-        bUseMenus = false;
-    }
-    else
-    {
-        bUseBorder = true;
-        bUseMenus = true;
-
-        dwWndStyle |= WS_OVERLAPPEDWINDOW;
-        hMenuSet = bUseMenus ? hMenuWindows : NULL;
-        bFullMode = false;
-    }
-
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
     bRequestFullMode = false;
 
     RECT rcClient = { 0, 0, pParams->BackBufferWidth, pParams->BackBufferHeight };
@@ -301,6 +238,7 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
     int nClientWidth = rcClient.right - rcClient.left;
     int nClientHeight = rcClient.bottom - rcClient.top;
 
+    bOldRecursion = bStopRecursion;
     bStopRecursion = true;
 
     SetWindowLong(*hGameWnd, GWL_STYLE, dwWndStyle);
@@ -309,67 +247,12 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
     nClientWidth = min(nClientWidth, nMonitorWidth);
     nClientHeight = min(nClientHeight, nMonitorHeight);
 
-<<<<<<< Updated upstream
     SetWindowPos(*hGameWnd, HWND_NOTOPMOST, 0, 0, nClientWidth, nClientHeight, SWP_NOACTIVATE);
-=======
-    if (!bFullMode)
-    {
-        nNonFullWidth = nCurrentWidth;
-        nNonFullHeight = nCurrentHeight;
-
-        static bool bFirstTime = true;
-        if (bFirstTime)
-        {
-            nNonFullPosX = (nMonitorWidth - nClientWidth) / 2;
-            nNonFullPosY = (nMonitorHeight - nClientHeight) / 2;
-            bFirstTime = false;
-        }
-        else
-        {
-            RECT rcWindow;
-            GetWindowRect(*hGameWnd, &rcWindow);
-            nNonFullPosX = rcWindow.left;
-            nNonFullPosY = rcWindow.top;
-        }
-
-        SetWindowPos(*hGameWnd, HWND_NOTOPMOST, nNonFullPosX, nNonFullPosY, nClientWidth, nClientHeight, SWP_NOACTIVATE);
-    }
-    else
-    {
-        SetWindowPos(*hGameWnd, HWND_NOTOPMOST, 0, 0, nClientWidth, nClientHeight, SWP_NOACTIVATE);
-    }
->>>>>>> Stashed changes
-
-    RECT rcRealClient;
-    GetClientRect(*hGameWnd, &rcRealClient);
-    pParams->BackBufferWidth = rcRealClient.right;
-    pParams->BackBufferHeight = rcRealClient.bottom;
-
-<<<<<<< Updated upstream
-    pParams->hDeviceWindow = *hGameWnd;
-    bResChanged = true;
-=======
-    RsGlobal->MaximumWidth = pParams->BackBufferWidth;
-    RsGlobal->MaximumHeight = pParams->BackBufferHeight;
-    bResChanged = true;
-
-    RECT rcRealClient;
-    GetClientRect(*hGameWnd, &rcRealClient);
-    pParams->BackBufferWidth = rcRealClient.right;
-    pParams->BackBufferHeight = rcRealClient.bottom;
-
-<<<<<<< Updated upstream
-    pParams->hDeviceWindow = *hGameWnd;
->>>>>>> Stashed changes
-=======
-    RsGlobal->MaximumWidth = pParams->BackBufferWidth;
-    RsGlobal->MaximumHeight = pParams->BackBufferHeight;
-    bResChanged = true;
 
     bStopRecursion = bOldRecursion;
 
     pParams->hDeviceWindow = *hGameWnd;
->>>>>>> Stashed changes
+    bResChanged = true;
 }
 
 void CDxHandler::ToggleFullScreen(void)
@@ -488,7 +371,7 @@ LRESULT APIENTRY CDxHandler::MvlWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
     {
     case WM_KILLFOCUS:
     case WM_ACTIVATE:
-        if (uMsg == WM_KILLFOCUS || wParam == WA_INACTIVE)
+        if (uMsg == WM_KILLFOCUS || wParam == WA_INACTIVE) // focus lost
         {
             // Usunięto 'if (!bFullMode && bUseBorder)'
             SetWindowTextA(*hGameWnd, RsGlobal->AppName); // Nadal może być przydatne do paska zadań
@@ -498,7 +381,7 @@ LRESULT APIENTRY CDxHandler::MvlWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
         break;
         // Usunięto 'case WM_LBUTTONUP'
     case WM_SETCURSOR:
-        return DefWindowProc(hwnd, uMsg, wParam, lParam);
+        return DefWindowProc(hwnd, uMsg, wParam, lParam); // restore proper handling of ShowCursor
     case WM_STYLECHANGING:
         if (bChangingLocked)
         {
@@ -666,6 +549,7 @@ int CDxHandler::ProcessMouseState(void)
             if (bInGameSA)
             {
                 CPostEffectsSetupBackBufferVertex();
+                // CPostEffectsDoScreenModeDependentInitializations();
             }
 
             bResChanged = false;
@@ -708,7 +592,7 @@ void __declspec(naked) CDxHandler::HookDirect3DDeviceReplacerSA(void)
     AdjustPresentParams((D3DPRESENT_PARAMETERS_D3D9*)HookParams);
 
     bOldLocked = bChangingLocked;
-    if (!bOldLocked) StoreRestoreWindowInfo(false);
+    if (!bOldLocked) StoreRestoreWindowInfo(false); // <-- Poprawiona spacja
     RemoveWindowProc();
     bChangingLocked = true;
 
@@ -719,7 +603,7 @@ void __declspec(naked) CDxHandler::HookDirect3DDeviceReplacerSA(void)
 
     bChangingLocked = bOldLocked;
     InjectWindowProc();
-    if (!bOldLocked) StoreRestoreWindowInfo(true);
+    if (!bOldLocked) StoreRestoreWindowInfo(true); // <-- Poprawiona spacja
 
     Direct3DDeviceReplaceSA();
     bStopRecursion = bOldRecursion;

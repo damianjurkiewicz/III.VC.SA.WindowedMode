@@ -6,14 +6,14 @@ BOOL APIENTRY DllMain(HMODULE /*hModule*/, DWORD reason, LPVOID /*lpReserved*/)
 	{
 		CDxHandler::ProcessIni();
 
-		
-		
-				if (injector::address_manager::singleton().IsSA())
-				{
-					CDxHandler::SetupHooksSA();
-				}
-			
-		
+
+
+		if (injector::address_manager::singleton().IsSA())
+		{
+			CDxHandler::SetupHooksSA();
+		}
+
+
 	}
 
 	if (reason == DLL_PROCESS_DETACH)
