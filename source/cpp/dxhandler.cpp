@@ -137,6 +137,7 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
     bool bOldRecursion = bStopRecursion;
 
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
     // --- START OF CONFIGURATION ---
 
     // 1. Always force windowed (borderless) mode
@@ -212,6 +213,9 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
     // --- BORDERLESS FULLSCREEN LOGIC (No need to edit below) ---
 =======
     pParams->Windowed = TRUE;
+=======
+    pParams->Windowed = TRUE;
+>>>>>>> Stashed changes
     pParams->BackBufferFormat = D3DFMT_UNKNOWN;
     pParams->EnableAutoDepthStencil = TRUE;
     pParams->AutoDepthStencilFormat = D3DFMT_D16;
@@ -220,11 +224,15 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
     pParams->SwapEffect = D3DSWAPEFFECT_DISCARD;
     pParams->FullScreen_RefreshRateInHz = 0;
     pParams->FullScreen_PresentationInterval = 0;
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 
     DWORD dwWndStyle = GetWindowLong(*hGameWnd, GWL_STYLE);
 
     auto [nMonitorWidth, nMonitorHeight] = GetDesktopRes();
+<<<<<<< Updated upstream
 <<<<<<< Updated upstream
 
     // Always force borderless fullscreen style
@@ -242,6 +250,8 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
     RsGlobal->MaximumHeight = pParams->BackBufferHeight;
 
 =======
+=======
+>>>>>>> Stashed changes
 
     nCurrentWidth = (int)pParams->BackBufferWidth;
     nCurrentHeight = (int)pParams->BackBufferHeight;
@@ -278,6 +288,9 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
         bFullMode = false;
     }
 
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
     bRequestFullMode = false;
 
@@ -335,6 +348,19 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
 <<<<<<< Updated upstream
     pParams->hDeviceWindow = *hGameWnd;
     bResChanged = true;
+=======
+    RsGlobal->MaximumWidth = pParams->BackBufferWidth;
+    RsGlobal->MaximumHeight = pParams->BackBufferHeight;
+    bResChanged = true;
+
+    RECT rcRealClient;
+    GetClientRect(*hGameWnd, &rcRealClient);
+    pParams->BackBufferWidth = rcRealClient.right;
+    pParams->BackBufferHeight = rcRealClient.bottom;
+
+<<<<<<< Updated upstream
+    pParams->hDeviceWindow = *hGameWnd;
+>>>>>>> Stashed changes
 =======
     RsGlobal->MaximumWidth = pParams->BackBufferWidth;
     RsGlobal->MaximumHeight = pParams->BackBufferHeight;
