@@ -12,6 +12,7 @@ public:
     static void ToggleFullScreen(void);
     static void StoreRestoreWindowInfo(bool bRestore);
     static void AdjustGameToWindowSize(void);
+    static void EnforceBorderlessStyle(void);
     static void MainCameraRebuildRaster(RwCamera* pCamera);
     static void Direct3DDeviceReplaceSA(void);
     static void InjectWindowProc(void);
@@ -26,6 +27,8 @@ public:
     static void ProcessIni(void);
     static HRESULT(__stdcall* oldReset)(LPDIRECT3DDEVICE8 pDevice, void* pPresentationParameters);
     static HRESULT(__stdcall* oldSetViewport)(LPDIRECT3DDEVICE8 pDevice, CONST D3DVIEWPORT8* pViewport);
+
+
 
     static bool bIsInputExclusive;
     static bool bCursorStatus;

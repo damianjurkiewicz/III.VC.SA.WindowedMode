@@ -336,6 +336,38 @@ void CDxHandler::AdjustGameToWindowSize(void)
     // Ta funkcja nie jest już potrzebna, ponieważ nie obsługujemy dynamicznej zmiany rozmiaru okna
 }
 
+
+void CDxHandler::EnforceBorderlessStyle(void)
+{
+    // Ta funkcja pilnuje, czy inny mod nie przywrócił ramki.
+    if (!bFullMode || !bWindowed || !hGameWnd || !*hGameWnd)
+        return;
+
+    // Pobierz *aktualny* styl okna
+    DWORD dwStyle = GetWindowLong(*hGameWnd, GWL_STYLE);
+
+    // Oblicz styl, jaki *chcemy* mieć (bez ramki)
+    DWORD dwWantStyle = dwStyle & ~WS_OVERLAPPEDWINDOW;
+
+    // Jeśli styl jest niepoprawny (ktoś dodał ramkę)...
+    if (dwStyle != dwWantStyle)
+    {
+        bool bOldRecursion = bStopRecursion;
+        bStopRecursion = true;
+
+        // Wymuś poprawny styl (bez ramki)
+        SetWindowLong(*hGameWnd, GWL_STYLE, dwWantStyle);
+
+        // Zmuś okno do natychmiastowego przerysowania się z nowym stylem
+        // To jest kluczowy element, który fizycznie usuwa ramkę
+        SetWindowPos(*hGameWnd, NULL, 0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+
+        bStopRecursion = bOldRecursion;
+    }
+}
+
+
 void CDxHandler::MainCameraRebuildRaster(RwCamera* pCamera)
 {
     if (pCamera == *pRenderCamera)
@@ -407,6 +439,14 @@ LRESULT APIENTRY CDxHandler::MvlWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
 
             SetCursorVisible(true);
         }
+
+        else if (uMsg == WM_ACTIVATE) // focus GAINED (gra wraca na pierwszy plan)
+        {
+            // Agresywnie sprawdź i usuń ramkę, na wypadek
+            // gdyby inny mod ją przywrócił, gdy byliśmy zminimalizowani.
+            EnforceBorderlessStyle();
+        }
+
         break;
         // Usunięto 'case WM_LBUTTONUP'
     case WM_SETCURSOR:
