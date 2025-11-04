@@ -569,7 +569,7 @@ void CDxHandler::InstallD3D9Hook(void)
         if (original_Direct3DCreate9)
         {
             // Hookuj globalny punkt wejścia
-            injector::MakeCALL(original_Direct3DCreate9, Hook_Direct3DCreate9, true);
+            injector::MakeJMP(original_Direct3DCreate9, Hook_Direct3DCreate9, true);
         }
     }
 
