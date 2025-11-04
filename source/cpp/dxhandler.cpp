@@ -260,6 +260,13 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
     RsGlobal->MaximumWidth = pParams->BackBufferWidth;
     RsGlobal->MaximumHeight = pParams->BackBufferHeight;
 
+    if (pDisplayModes && *pDisplayModes && RwEngineGetCurrentVideoMode)
+    {
+        int nModeIndex = RwEngineGetCurrentVideoMode();
+        (*CDxHandler::pDisplayModes)[nModeIndex].nWidth = pParams->BackBufferWidth;
+        (*CDxHandler::pDisplayModes)[nModeIndex].nHeight = pParams->BackBufferHeight;
+    }
+
     bRequestFullMode = false;
 
     RECT rcClient = { 0, 0, pParams->BackBufferWidth, pParams->BackBufferHeight };
