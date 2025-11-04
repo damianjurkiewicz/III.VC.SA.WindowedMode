@@ -1,6 +1,6 @@
 #include "dxhandler.h"
 
-const bool FORCE_FULLSCREEN_MODE = false;
+const bool FORCE_FULLSCREEN_MODE = true;
 
 CIniReader iniReader("");
 
