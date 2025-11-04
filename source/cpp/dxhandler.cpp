@@ -1,19 +1,18 @@
-#include "dxhandler.h"
+﻿#include "dxhandler.h"
 
-CIniReader iniReader("III.VC.SA.WindowedMode");
+const bool FORCE_FULLSCREEN_MODE = true;
+
+CIniReader iniReader("WindowedMode.ini");
+
 int CDxHandler::nResetCounter = 0;
 int CDxHandler::nCurrentWidth = 0, CDxHandler::nCurrentHeight = 0;
-int CDxHandler::nNonFullWidth = 600, CDxHandler::nNonFullHeight = 450, CDxHandler::nNonFullPosX = -1, CDxHandler::nNonFullPosY = -1;
+// Usunięto zmienne nNonFull...
 bool CDxHandler::bFullMode = false, CDxHandler::bRequestFullMode = false, CDxHandler::bRequestNoBorderMode = false;
 bool CDxHandler::bChangingLocked = false;
-HMENU CDxHandler::hMenuWindows = NULL;
+HMENU CDxHandler::hMenuWindows = NULL; // Pozostawione na wszelki wypadek, ale nieużywane
 WNDPROC CDxHandler::wndProcOld = NULL;
 bool CDxHandler::bIsInputExclusive = false;
 bool CDxHandler::bGameMouseInactive = false;
-bool CDxHandler::bCtrlAltLastState = false;
-bool CDxHandler::bAltEnterLastState = false;
-bool CDxHandler::bShiftEnterLastState = false;
-bool CDxHandler::bCtrlEnterLastState = false;
 bool CDxHandler::bStopRecursion = false;
 bool CDxHandler::bSizingLoop = false;
 IDirect3D8** CDxHandler::pIntDirect3DMain;
@@ -23,8 +22,10 @@ bool* CDxHandler::bMenuVisible;
 HWND* CDxHandler::hGameWnd;
 DisplayMode** CDxHandler::pDisplayModes;
 
-HRESULT(__stdcall *CDxHandler::oldReset)(LPDIRECT3DDEVICE8 pDevice, void* pPresentationParameters);
-HRESULT(__stdcall *CDxHandler::oldSetViewport)(LPDIRECT3DDEVICE8 pDevice, CONST D3DVIEWPORT8* pViewport);
+// Usunięto bRequestWindowedMode
+
+HRESULT(__stdcall* CDxHandler::oldReset)(LPDIRECT3DDEVICE8 pDevice, void* pPresentationParameters);
+HRESULT(__stdcall* CDxHandler::oldSetViewport)(LPDIRECT3DDEVICE8 pDevice, CONST D3DVIEWPORT8* pViewport);
 void(*CDxHandler::CPostEffectsDoScreenModeDependentInitializations)();
 void(*CDxHandler::CPostEffectsSetupBackBufferVertex)();
 void(*CDxHandler::CMBlurMotionBlurOpen)(RwCamera*);
@@ -32,8 +33,8 @@ int(*CDxHandler::DxInputGetMouseState)(int a1);
 void(*CDxHandler::ReinitializeRw)(int a1);
 int(*CDxHandler::RwEngineGetCurrentVideoMode)();
 bool(*CDxHandler::RwRasterDestroy)(RwRaster* pRaster);
-RwRaster*(*CDxHandler::RwRasterCreate)(int32_t nWidth, int32_t nHeight, int32_t nDepth, int32_t nFlags);
-RwCamera*(*CDxHandler::RwCameraClear)(RwCamera* pCamera, void* pColor, int32_t nClearMode);
+RwRaster* (*CDxHandler::RwRasterCreate)(int32_t nWidth, int32_t nHeight, int32_t nDepth, int32_t nFlags);
+RwCamera* (*CDxHandler::RwCameraClear)(RwCamera* pCamera, void* pColor, int32_t nClearMode);
 RwCamera** CDxHandler::pRenderCamera;
 RsGlobalType* CDxHandler::RsGlobal;
 uint32_t CDxHandler::RwD3D8AdapterInformation_DisplayMode;
@@ -41,17 +42,26 @@ uint32_t CDxHandler::CamCol;
 uint32_t CDxHandler::HookParams;
 uint32_t CDxHandler::HookDirect3DDeviceReplacerJmp;
 bool* CDxHandler::bBlurOn;
-bool CDxHandler::bInGame3VC = false;
 bool CDxHandler::bInGameSA = false;
 bool CDxHandler::bResChanged = false;
 bool CDxHandler::bWindowed = true;
-bool CDxHandler::bUseMenus = true;
-bool CDxHandler::bUseBorder = true;
+bool CDxHandler::bUseMenus = true; // Ustawiane na false w AdjustPresentParams
+bool CDxHandler::bUseBorder = true; // Ustawiane na false w AdjustPresentParams
 SHELLEXECUTEINFOA CDxHandler::ShExecInfo = { 0 };
 char CDxHandler::lpWindowName[MAX_PATH];
 
-bool CDxHandler::bRequestWindowedMode = false; // NEW
-bool CDxHandler::bDisableHotkeys = false;
+
+//ini
+int CDxHandler::ini_BackBufferFormat = -1;
+int CDxHandler::ini_EnableAutoDepthStencil = -1;
+int CDxHandler::ini_AutoDepthStencilFormat = -1;
+int CDxHandler::ini_BackBufferCount = -1;
+int CDxHandler::ini_MultiSampleType = -1;
+int CDxHandler::ini_SwapEffect = -1;
+int CDxHandler::ini_PresentationInterval = -1;
+int CDxHandler::ini_RefreshRateInHz = -1;
+int CDxHandler::ini_MultiSampleQuality = -1;
+int CDxHandler::ini_Flags = -1;
 
 std::tuple<int32_t, int32_t> GetDesktopRes()
 {
@@ -69,8 +79,7 @@ void SetCursorVisible(bool state)
     // ShowCursor returns state. Use with current visibility to prevent flickering
     CURSORINFO info = { sizeof(CURSORINFO) };
     if (!GetCursorInfo(&info)) return;
-    bool currState = ShowCursor(info.flags & CURSOR_SHOWING) >= 0; 
-
+    bool currState = ShowCursor(info.flags & CURSOR_SHOWING) >= 0;
     while (currState != state)
     {
         currState = ShowCursor(state) >= 0;
@@ -79,25 +88,16 @@ void SetCursorVisible(bool state)
 
 void CDxHandler::ProcessIni(void)
 {
-
-    bDisableHotkeys = iniReader.ReadInteger("MAIN", "DisableHotkeys", 0) != 0;
-
-    bUseMenus = iniReader.ReadInteger("MAIN", "ShowMenu", 1) != 0;
-    bUseBorder = iniReader.ReadInteger("MAIN", "ShowBorder", 1) != 0;
-
-    int iniFull = iniReader.ReadInteger("MAIN", "FullScreenMode",
-        iniReader.ReadInteger("MAIN", "FullMode", -1));
-
-    if (iniFull == 1) {
-        bRequestFullMode = true;
-        bRequestWindowedMode = false;
-        bFullMode = false;
-    }
-    else if (iniFull == 0) {
-        bRequestFullMode = false;
-        bRequestWindowedMode = true;
-        bFullMode = false;
-    }
+    ini_BackBufferFormat = iniReader.ReadInteger("Direct3D", "BackBufferFormat", -1);
+    ini_EnableAutoDepthStencil = iniReader.ReadInteger("Direct3D", "EnableAutoDepthStencil", -1);
+    ini_AutoDepthStencilFormat = iniReader.ReadInteger("Direct3D", "AutoDepthStencilFormat", -1);
+    ini_BackBufferCount = iniReader.ReadInteger("Direct3D", "BackBufferCount", -1);
+    ini_MultiSampleType = iniReader.ReadInteger("Direct3D", "MultiSampleType", -1);
+    ini_SwapEffect = iniReader.ReadInteger("Direct3D", "SwapEffect", -1);
+    ini_PresentationInterval = iniReader.ReadInteger("Direct3D", "PresentationInterval", -1);
+    ini_RefreshRateInHz = iniReader.ReadInteger("Direct3D", "RefreshRateInHz", -1);
+    ini_MultiSampleQuality = iniReader.ReadInteger("Direct3D", "MultiSampleQuality", -1);
+    ini_Flags = iniReader.ReadInteger("Direct3D", "Flags", -1);
 }
 
 template<class D3D_TYPE>
@@ -137,33 +137,91 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
 
     bool bOldRecursion = bStopRecursion;
 
-    if (hMenuWindows == NULL && (bInGame3VC || bInGameSA))
-    {
-        hMenuWindows = CreateMenu();
-        AppendMenuA(hMenuWindows, MF_STRING, (WORD)&hMenuWindows, "CoordsManager");
-    }
+    // --- START OF CONFIGURATION ---
 
+    // 1. Always force windowed (borderless) mode
     pParams->Windowed = TRUE;
 
-    pParams->FullScreen_PresentationInterval = 0;
-    pParams->FullScreen_RefreshRateInHz = 0;
-    pParams->EnableAutoDepthStencil = TRUE;
-    pParams->BackBufferFormat = D3DFMT_X8R8G8B8;
-
-    if (bInGameSA)
+    // 2. Apply all settings from the .ini file (only if they are not -1)
+    if (ini_BackBufferFormat != -1)
     {
-        pParams->BackBufferFormat = D3DFMT_A8R8G8B8;
+        pParams->BackBufferFormat = (D3DFORMAT)ini_BackBufferFormat;
     }
 
-    //pParams->MultiSampleType = (D3DMULTISAMPLE_TYPE)8;
+    if (ini_EnableAutoDepthStencil != -1)
+    {
+        pParams->EnableAutoDepthStencil = (BOOL)ini_EnableAutoDepthStencil;
+    }
 
-    if (pParams->MultiSampleType > 0) {
+    if (ini_AutoDepthStencilFormat != -1)
+    {
+        pParams->AutoDepthStencilFormat = (D3DFORMAT)ini_AutoDepthStencilFormat;
+    }
+
+    if (ini_BackBufferCount != -1)
+
+    {
+        pParams->BackBufferCount = ini_BackBufferCount;
+    }
+
+    if (ini_MultiSampleType != -1)
+    {
+        pParams->MultiSampleType = (D3DMULTISAMPLE_TYPE)ini_MultiSampleType;
+    }
+
+    // --- NEW ---
+    if (ini_MultiSampleQuality != -1)
+    {
+        pParams->MultiSampleQuality = ini_MultiSampleQuality;
+    }
+
+    if (ini_SwapEffect != -1)
+    {
+        pParams->SwapEffect = (D3DSWAPEFFECT)ini_SwapEffect;
+    }
+
+    if (ini_PresentationInterval != -1)
+    {
+        pParams->FullScreen_PresentationInterval = ini_PresentationInterval;
+    }
+
+    if (ini_RefreshRateInHz != -1)
+    {
+        pParams->FullScreen_RefreshRateInHz = ini_RefreshRateInHz;
+    }
+
+    // --- NEW ---
+    if (ini_Flags != -1)
+    {
+        // This will REPLACE all default flags. 
+        // Use 0 to clear all flags.
+        pParams->Flags = ini_Flags;
+    }
+
+    // 3. Safety check for MultiSampling (MSAA)
+    // This MUST run after .ini settings are applied.
+    if (pParams->MultiSampleType > 0)
+    {
+        // If MSAA is enabled (from game or .ini), we MUST force DISCARD swap effect
+        // to prevent a crash.
         pParams->SwapEffect = D3DSWAPEFFECT_DISCARD;
     }
+    // --- END OF CONFIGURATION ---
+
+
+    // --- BORDERLESS FULLSCREEN LOGIC (No need to edit below) ---
 
     DWORD dwWndStyle = GetWindowLong(*hGameWnd, GWL_STYLE);
 
-    auto[nMonitorWidth, nMonitorHeight] = GetDesktopRes();
+    auto [nMonitorWidth, nMonitorHeight] = GetDesktopRes();
+
+    // Always force borderless fullscreen style
+    dwWndStyle &= ~WS_OVERLAPPEDWINDOW;
+    pParams->BackBufferWidth = nMonitorWidth;
+    pParams->BackBufferHeight = nMonitorHeight;
+    bFullMode = true;
+    bUseBorder = false;
+    bUseMenus = false;
 
     nCurrentWidth = (int)pParams->BackBufferWidth;
     nCurrentHeight = (int)pParams->BackBufferHeight;
@@ -171,36 +229,11 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
     RsGlobal->MaximumWidth = pParams->BackBufferWidth;
     RsGlobal->MaximumHeight = pParams->BackBufferHeight;
 
-    HMENU hMenuSet = NULL;
-
-    bool wantsFull = bRequestFullMode;
-    bool wantsWindowed = bRequestWindowedMode;
-
-    if (wantsFull || (!wantsWindowed && nCurrentWidth == nMonitorWidth && nCurrentHeight == nMonitorHeight))
-    {
-       
-        dwWndStyle &= ~WS_OVERLAPPEDWINDOW;
-        pParams->BackBufferWidth = nMonitorWidth;
-        pParams->BackBufferHeight = nMonitorHeight;
-        bFullMode = true;
-    }
-    else
-    {
-       
-        if (!bUseBorder) dwWndStyle &= ~WS_OVERLAPPEDWINDOW;
-        else {
-            dwWndStyle |= WS_OVERLAPPEDWINDOW;
-            hMenuSet = bUseMenus ? hMenuWindows : NULL;
-        }
-        bFullMode = false;
-    }
-
- 
     bRequestFullMode = false;
-    bRequestWindowedMode = false;
 
     RECT rcClient = { 0, 0, pParams->BackBufferWidth, pParams->BackBufferHeight };
-    AdjustWindowRectEx(&rcClient, dwWndStyle, hMenuSet != NULL, GetWindowLong(*hGameWnd, GWL_EXSTYLE));
+
+    AdjustWindowRectEx(&rcClient, dwWndStyle, FALSE, GetWindowLong(*hGameWnd, GWL_EXSTYLE));
 
     int nClientWidth = rcClient.right - rcClient.left;
     int nClientHeight = rcClient.bottom - rcClient.top;
@@ -209,78 +242,21 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
     bStopRecursion = true;
 
     SetWindowLong(*hGameWnd, GWL_STYLE, dwWndStyle);
-    SetMenu(*hGameWnd, hMenuSet);
-
-    if (hMenuSet)
-    {
-        rcClient.bottom = 0x7FFF;
-        SendMessage(*hGameWnd, WM_NCCALCSIZE, FALSE, (LPARAM)&rcClient);
-        nClientHeight += rcClient.top;
-    }
+    SetMenu(*hGameWnd, NULL);
 
     nClientWidth = min(nClientWidth, nMonitorWidth);
     nClientHeight = min(nClientHeight, nMonitorHeight);
 
-    if (!bFullMode)
-    {
-        nNonFullWidth = nCurrentWidth;
-        nNonFullHeight = nCurrentHeight;
-
-        static bool bFirstTime = true;
-        if (bFirstTime)
-        {
-            // load window position from config
-            nNonFullPosX = iniReader.ReadInteger("MAIN", "PosX", -1);
-            nNonFullPosY = iniReader.ReadInteger("MAIN", "PosY", -1);
-
-            // center on the screen
-            if (nNonFullPosX == -1) nNonFullPosX = (nMonitorWidth - nClientWidth) / 2;
-            if (nNonFullPosY == -1) nNonFullPosY = (nMonitorHeight - nClientHeight) / 2;
-
-            bFirstTime = false;
-        }
-        else
-        {
-            RECT rcWindow;
-            GetWindowRect(*hGameWnd, &rcWindow);
-            nNonFullPosX = rcWindow.left;
-            nNonFullPosY = rcWindow.top;
-        }
-
-        SetWindowPos(*hGameWnd, HWND_NOTOPMOST, nNonFullPosX, nNonFullPosY, nClientWidth, nClientHeight, SWP_NOACTIVATE);
-    }
-    else // full screen
-    {
-        SetWindowPos(*hGameWnd, HWND_NOTOPMOST, 0, 0, nClientWidth, nClientHeight, SWP_NOACTIVATE);
-    }
+    SetWindowPos(*hGameWnd, HWND_NOTOPMOST, 0, 0, nClientWidth, nClientHeight, SWP_NOACTIVATE);
 
     bStopRecursion = bOldRecursion;
 
-    GetClientRect(*hGameWnd, &rcClient);
-
-    pParams->BackBufferWidth = rcClient.right;
-    pParams->BackBufferHeight = rcClient.bottom;
     pParams->hDeviceWindow = *hGameWnd;
     bResChanged = true;
 }
 
 void CDxHandler::ToggleFullScreen(void)
 {
-    bool targetFull = !bFullMode;
-
-    if (targetFull) {
-        auto [mw, mh] = GetDesktopRes();
-        bRequestFullMode = true;
-        SetWindowPos(*hGameWnd, NULL, 0, 0, mw, mh, SWP_NOACTIVATE | SWP_NOZORDER);
-    }
-    else {
-        bRequestWindowedMode = true;
-        SetWindowPos(*hGameWnd, NULL, nNonFullPosX, nNonFullPosY, nNonFullWidth, nNonFullHeight, SWP_NOACTIVATE | SWP_NOZORDER);
-    }
-
-    bResChanged = true;
-    iniReader.WriteInteger("MAIN", "FullScreenMode", targetFull, true);
-   
 }
 
 void CDxHandler::StoreRestoreWindowInfo(bool bRestore)
@@ -328,32 +304,7 @@ void CDxHandler::StoreRestoreWindowInfo(bool bRestore)
 
 void CDxHandler::AdjustGameToWindowSize(void)
 {
-    RECT rcClient;
-    GetClientRect(*hGameWnd, &rcClient);
-
-    int nModeIndex = RwEngineGetCurrentVideoMode();
-    if (*pDisplayModes)
-    {
-        bool bSizeChanged = ((*pDisplayModes)[nModeIndex].nWidth != rcClient.right || (*pDisplayModes)[nModeIndex].nHeight != rcClient.bottom);
-
-        if (bSizeChanged) {
-            (*pDisplayModes)[nModeIndex].nWidth = rcClient.right;
-            (*pDisplayModes)[nModeIndex].nHeight = rcClient.bottom;
-
-            RwCameraClear(*pRenderCamera, (void*)CamCol, 2);
-        }
-
-        if (!bFullMode) {
-            RECT rcWindow;
-            GetWindowRect(*hGameWnd, &rcWindow);
-
-            if (rcWindow.left != 0 && rcWindow.top != 0)
-            {
-                nNonFullPosX = rcWindow.left;
-                nNonFullPosY = rcWindow.top;
-            }
-        }
-    }
+    // Ta funkcja nie jest już potrzebna, ponieważ nie obsługujemy dynamicznej zmiany rozmiaru okna
 }
 
 void CDxHandler::MainCameraRebuildRaster(RwCamera* pCamera)
@@ -418,62 +369,17 @@ LRESULT APIENTRY CDxHandler::MvlWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
 {
     switch (uMsg)
     {
-    case WM_COMMAND:
-        if (LOWORD(wParam) == (WORD)&hMenuWindows)
-        {
-            static bool bIsCMopen = false;
-            static auto cb = [](HWND hwnd, LPARAM lParam) -> BOOL
-            {
-                char text[25];
-                GetWindowTextA(hwnd, text, 25);
-                if (strncmp(text, "Coords Manager", strlen("Coords Manager")) == 0)
-                {
-                    SetForegroundWindow(hwnd);
-                    bIsCMopen = true;
-                    return FALSE;
-                }
-                return TRUE;
-            };
-
-            EnumWindows(cb, 0);
-
-            if (!bIsCMopen)
-            {
-                char* szFilePath = (char*)iniReader.GetIniPath().c_str();
-                *strrchr(szFilePath, '\\') = '\0';
-                strcat(szFilePath, "\\III.VC.SA.CoordsManager.exe");
-
-                ShExecInfo.cbSize = sizeof(SHELLEXECUTEINFO);
-                ShExecInfo.fMask = SEE_MASK_NOCLOSEPROCESS;
-                ShExecInfo.hwnd = NULL;
-                ShExecInfo.lpVerb = NULL;
-                ShExecInfo.lpFile = szFilePath;
-                ShExecInfo.lpParameters = "";
-                ShExecInfo.lpDirectory = NULL;
-                ShExecInfo.nShow = SW_SHOWNORMAL;
-                ShExecInfo.hInstApp = NULL;
-                ShellExecuteExA(&ShExecInfo);
-                //WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
-            }
-        }
-        break;
     case WM_KILLFOCUS:
     case WM_ACTIVATE:
         if (uMsg == WM_KILLFOCUS || wParam == WA_INACTIVE) // focus lost
         {
-            // clear resolution info from window tile
-            if (!bFullMode && bUseBorder)
-                SetWindowTextA(*hGameWnd, RsGlobal->AppName);
+            // Usunięto 'if (!bFullMode && bUseBorder)'
+            SetWindowTextA(*hGameWnd, RsGlobal->AppName); // Nadal może być przydatne do paska zadań
 
             SetCursorVisible(true);
         }
         break;
-    case WM_LBUTTONUP:
-        if (!*bMenuVisible && IsCursorInClientRect())
-        {
-            ActivateGameMouse();
-        }
-        break;
+        // Usunięto 'case WM_LBUTTONUP'
     case WM_SETCURSOR:
         return DefWindowProc(hwnd, uMsg, wParam, lParam); // restore proper handling of ShowCursor
     case WM_STYLECHANGING:
@@ -494,13 +400,6 @@ LRESULT APIENTRY CDxHandler::MvlWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
     {
         if (uMsg == WM_EXITSIZEMOVE)
         {
-            RECT rect;
-            if(GetWindowRect(*hGameWnd, &rect))
-            {
-                iniReader.WriteInteger("MAIN", "PosX", rect.left, true);
-                iniReader.WriteInteger("MAIN", "PosY", rect.top, true);
-            }
-
             bSizingLoop = false;
         }
 
@@ -510,36 +409,20 @@ LRESULT APIENTRY CDxHandler::MvlWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
             pPosInfo->flags = SWP_NOZORDER | SWP_NOSIZE | SWP_NOREPOSITION | SWP_NOREDRAW | SWP_NOOWNERZORDER | SWP_NOMOVE | SWP_NOACTIVATE;
         }
 
-        if (!bChangingLocked && !bStopRecursion && bWindowed)
-        {
-            AdjustGameToWindowSize();
-        }
+        // Usunięto wywołanie AdjustGameToWindowSize()
+        // if (!bChangingLocked && !bStopRecursion && bWindowed)
+        // {
+        //     AdjustGameToWindowSize();
+        // }
 
         return 0;
     }
-    case WM_KEYDOWN:
-    case WM_SYSKEYDOWN:
-        if ((GetKeyState(VK_MENU) & 0x8000) && (wParam == VK_CONTROL || wParam == VK_RETURN))
-        {
-            return 0;
-        }
-        break;
-    case WM_SYSCOMMAND:
-        if (wParam == SC_KEYMENU)
-        {
-            return 0;
-        }
-        break;
     }
 
     return CallWindowProc(wndProcOld, hwnd, uMsg, wParam, lParam);
 }
 
 HRESULT __stdcall ResetSA(LPDIRECT3DDEVICE8 pDevice, D3DPRESENT_PARAMETERS_D3D9* pPresentationParameters) {
-    return CDxHandler::HandleReset(pPresentationParameters, nullptr);
-}
-
-HRESULT __stdcall Reset(LPDIRECT3DDEVICE8 pDevice, D3DPRESENT_PARAMETERS* pPresentationParameters) {
     return CDxHandler::HandleReset(pPresentationParameters, nullptr);
 }
 
@@ -560,29 +443,12 @@ void CDxHandler::Direct3DDeviceReplaceSA(void)
         UINT_PTR* pVTable = (UINT_PTR*)(*((UINT_PTR*)*pDirect3DDevice));
         if (!oldReset)
         {
-            oldReset = (HRESULT(__stdcall *)(LPDIRECT3DDEVICE8 pDevice, void* pPresentationParameters))(*(uint32_t*)&pVTable[16]);
-            oldSetViewport = (HRESULT(__stdcall *)(LPDIRECT3DDEVICE8 pDevice, CONST D3DVIEWPORT8* pViewport))(*(uint32_t*)&pVTable[47]);
+            oldReset = (HRESULT(__stdcall*)(LPDIRECT3DDEVICE8 pDevice, void* pPresentationParameters))(*(uint32_t*)&pVTable[16]);
+            oldSetViewport = (HRESULT(__stdcall*)(LPDIRECT3DDEVICE8 pDevice, CONST D3DVIEWPORT8 * pViewport))(*(uint32_t*)&pVTable[47]);
         }
 
         injector::WriteMemory(&pVTable[16], &ResetSA, true);
         injector::WriteMemory(&pVTable[47], &SetViewport, true);
-    }
-}
-
-
-void CDxHandler::Direct3DDeviceReplace(void)
-{
-    if (*pDirect3DDevice != NULL)
-    {
-        UINT_PTR* pVTable = (UINT_PTR*)(*((UINT_PTR*)*pDirect3DDevice));
-        if (!oldReset)
-        {
-            oldReset = (HRESULT(__stdcall *)(LPDIRECT3DDEVICE8 pDevice, void* pPresentationParameters))(*(uint32_t*)&pVTable[14]);
-            oldSetViewport = (HRESULT(__stdcall *)(LPDIRECT3DDEVICE8 pDevice, CONST D3DVIEWPORT8* pViewport))(*(uint32_t*)&pVTable[40]);
-        }
-
-        injector::WriteMemory(&pVTable[14], &Reset, true);
-        injector::WriteMemory(&pVTable[40], &SetViewport, true);
     }
 }
 
@@ -664,19 +530,11 @@ int CDxHandler::ProcessMouseState(void)
     static Fps _fps;
     _fps.update();
 
-    if (!bFullMode && bUseBorder)
-    {
-        sprintf(lpWindowName, "%s | %dx%d @ %d fps", RsGlobal->AppName, RsGlobal->MaximumWidth, RsGlobal->MaximumHeight, _fps.get());
-        SetWindowTextA(*hGameWnd, lpWindowName);
-    }
+    // Usunięto blok 'if (!bFullMode && bUseBorder)' do ustawiania tytułu okna
+    // (nie ma paska tytułowego)
 
     bool bShowCursor = true;
     bool bForeground = (GetForegroundWindow() == *hGameWnd);
-
-    bool bCtrlAltCurState = bForeground && ((GetKeyState(VK_MENU) & 0x8000) && (GetKeyState(VK_CONTROL) & 0x8000));
-    bool bAltEnterCurState = bForeground && ((GetKeyState(VK_MENU) & 0x8000) && (GetKeyState(VK_RETURN) & 0x8000));
-    bool bShiftEnterCurState = bForeground && ((GetKeyState(VK_SHIFT) & 0x8000) && (GetKeyState(VK_RETURN) & 0x8000));
-    bool bCtrlEnterCurState = bForeground && ((GetKeyState(VK_CONTROL) & 0x8000) && (GetKeyState(VK_RETURN) & 0x8000));
 
     static DWORD dwLastCheck = 0;
 
@@ -686,32 +544,8 @@ int CDxHandler::ProcessMouseState(void)
     }
     else
     {
-        if (bInGame3VC)
-        {
-            auto GetWidescreenFix = []() -> HMODULE {
-                constexpr auto dll1 = L"GTAVC.WidescreenFix.asi";
-                constexpr auto dll2 = L"GTA3.WidescreenFix";
-                auto hm = GetModuleHandleW(dll1);
-                if (!hm) hm = GetModuleHandleW(dll2);
-                return hm;
-                };
-
-            auto m = GetWidescreenFix();
-            if (m)
-            {
-                auto UpdateVars = (void (*)())GetProcAddress(m, "UpdateVars");
-                if (UpdateVars) UpdateVars();
-            }
-        }
-
         if (bResChanged)
         {
-            if (bInGame3VC)
-            {
-                if (*bBlurOn)
-                    CMBlurMotionBlurOpen(*pRenderCamera);
-            }
-
             if (bInGameSA)
             {
                 CPostEffectsSetupBackBufferVertex();
@@ -721,55 +555,6 @@ int CDxHandler::ProcessMouseState(void)
             bResChanged = false;
         }
     }
-
-
-    if (!bDisableHotkeys)
-    {
-        if (!bFullMode && !bShiftEnterLastState && bShiftEnterCurState)
-        {
-            if (bUseMenus && !bUseBorder) bUseMenus = true;
-            else                          bUseMenus = !bUseMenus;
-
-            bUseBorder = true;
-            SetMenu(*hGameWnd, bUseMenus ? hMenuWindows : NULL);
-            iniReader.WriteInteger("MAIN", "ShowMenu", bUseMenus, true);
-        }
-        else
-        {
-            if (!bFullMode && !bCtrlEnterLastState && bCtrlEnterCurState)
-            {
-                bUseBorder = !bUseBorder;
-                DWORD dwWndStyle = GetWindowLong(*hGameWnd, GWL_STYLE);
-                if (!bUseBorder) dwWndStyle &= ~WS_OVERLAPPEDWINDOW;
-                else             dwWndStyle |= WS_OVERLAPPEDWINDOW;
-                SetWindowLong(*hGameWnd, GWL_STYLE, dwWndStyle);
-                iniReader.WriteInteger("MAIN", "ShowBorder", bUseBorder, true);
-            }
-        }
-
-        if (!bAltEnterLastState && bAltEnterCurState)
-        {
-            ToggleFullScreen();
-        }
-    }
-
-
-    bShiftEnterLastState = bShiftEnterCurState;
-    bCtrlEnterLastState = bCtrlEnterCurState;
-    bAltEnterLastState = bAltEnterCurState;
-
-
-    if (!*bMenuVisible)
-    {
-        if (!bDisableHotkeys && !bCtrlAltLastState && bCtrlAltCurState)
-        {
-            if (bGameMouseInactive) { DxInputCreateDevice(true);  bGameMouseInactive = false; }
-            else { DxInputCreateDevice(false); bGameMouseInactive = true; }
-        }
-    }
-
-    bCtrlAltLastState = bCtrlAltCurState;
-
 
     if (*bMenuVisible)
     {
@@ -792,43 +577,6 @@ int CDxHandler::ProcessMouseState(void)
     return 1;
 }
 
-
-void __declspec(naked) CDxHandler::HookDirect3DDeviceReplacer(void)
-{
-    static HRESULT hRes;
-    static bool bOldRecursion;
-    static bool bOldLocked;
-
-    _asm pushad
-
-    bOldRecursion = bStopRecursion;
-    bStopRecursion = true;
-
-    InjectWindowProc();
-    AdjustPresentParams((D3DPRESENT_PARAMETERS*)HookParams);
-
-    bOldLocked = bChangingLocked;
-    if (!bOldLocked)  StoreRestoreWindowInfo(false);
-    RemoveWindowProc();
-    bChangingLocked = true;
-
-    _asm popad
-    _asm call[ecx + 3Ch]
-    _asm mov hRes, eax
-    _asm pushad
-
-    bChangingLocked = bOldLocked;
-    InjectWindowProc();
-    if (!bOldLocked)  StoreRestoreWindowInfo(true);
-
-    Direct3DDeviceReplace();
-    bStopRecursion = bOldRecursion;
-
-    _asm popad
-    _asm cmp eax, ebp
-    _asm jmp HookDirect3DDeviceReplacerJmp
-}
-
 void __declspec(naked) CDxHandler::HookDirect3DDeviceReplacerSA(void)
 {
     static HRESULT hRes;
@@ -844,7 +592,7 @@ void __declspec(naked) CDxHandler::HookDirect3DDeviceReplacerSA(void)
     AdjustPresentParams((D3DPRESENT_PARAMETERS_D3D9*)HookParams);
 
     bOldLocked = bChangingLocked;
-    if (!bOldLocked) StoreRestoreWindowInfo(false);
+    if (!bOldLocked) StoreRestoreWindowInfo(false); // <-- Poprawiona spacja
     RemoveWindowProc();
     bChangingLocked = true;
 
@@ -855,7 +603,7 @@ void __declspec(naked) CDxHandler::HookDirect3DDeviceReplacerSA(void)
 
     bChangingLocked = bOldLocked;
     InjectWindowProc();
-    if (!bOldLocked) StoreRestoreWindowInfo(true);
+    if (!bOldLocked) StoreRestoreWindowInfo(true); // <-- Poprawiona spacja
 
     Direct3DDeviceReplaceSA();
     bStopRecursion = bOldRecursion;

@@ -8,9 +8,9 @@ void CDxHandler::SetupHooksSA(void)
 	DxInputGetMouseState = (int(*)(int))0x746ED0;
 	ReinitializeRw = (void(*)(int))0x0;
 	RwEngineGetCurrentVideoMode = (int(*)())0x7F2D20;
-	RwCameraClear = (RwCamera*(*)(RwCamera*, void*, int32_t))0x7EE340;
+	RwCameraClear = (RwCamera * (*)(RwCamera*, void*, int32_t))0x7EE340;
 	RwRasterDestroy = (bool(*)(RwRaster*))0x7FB020;
-	RwRasterCreate = (RwRaster*(*)(int32_t, int32_t, int32_t, int32_t))0x7FB230;
+	RwRasterCreate = (RwRaster * (*)(int32_t, int32_t, int32_t, int32_t))0x7FB230;
 
 	pRenderCamera = (RwCamera**)0xC1703C;
 	pIntDirect3DMain = (IDirect3D8**)0xC97C20;
@@ -76,12 +76,12 @@ void CDxHandler::SetupHooksSA(void)
 		void operator()(injector::reg_pack& regs)
 		{
 			*(uintptr_t*)regs.esp = 0x748DA3;
-	
+
 			bStopRecursion = true;
-	
+
 			//ReinitializeRw(RwEngineGetCurrentVideoMode());
 			RwCameraClear(*pRenderCamera, (void*)CamCol, 2);
-	
+
 			bStopRecursion = false;
 		}
 	}; injector::MakeInline<HookDxReload>(0x748C60);
