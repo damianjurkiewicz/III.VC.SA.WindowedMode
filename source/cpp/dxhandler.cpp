@@ -1,5 +1,6 @@
-﻿#include "dxhandler.h"
-
+﻿
+#include "dxhandler.h"
+#include "Logger.h"
 const bool FORCE_FULLSCREEN_MODE = true;
 
 CIniReader iniReader("COMP.WindowedMode.ini");
@@ -109,9 +110,19 @@ void CDxHandler::ProcessIni(void)
 template<class D3D_TYPE>
 HRESULT CDxHandler::HandleReset(D3D_TYPE* pPresentationParameters, void* pSourceAddress)
 {
+    // --- DODANY LOG (po angielsku) ---
+    LOG_STREAM << "HandleReset: START. Input params (from game): "
+        << pPresentationParameters->BackBufferWidth << "x" << pPresentationParameters->BackBufferHeight;
+
     if (bWindowed)
     {
+        // --- DODANY LOG (po angielsku) ---
+        LOG_STREAM << "HandleReset: Calling AdjustPresentParams...";
         CDxHandler::AdjustPresentParams(pPresentationParameters);
+
+        // --- DODANY LOG (po angielsku) ---
+        LOG_STREAM << "HandleReset: After AdjustPresentParams. Output params (to driver): "
+            << pPresentationParameters->BackBufferWidth << "x" << pPresentationParameters->BackBufferHeight;
     }
 
     CDxHandler::nResetCounter++;
@@ -125,6 +136,16 @@ HRESULT CDxHandler::HandleReset(D3D_TYPE* pPresentationParameters, void* pSource
     CDxHandler::bStopRecursion = bOldRecursion;
 
     if (!bInitialLocked) CDxHandler::StoreRestoreWindowInfo(true);
+
+    // --- DODANY LOG (po angielsku) ---
+    if (SUCCEEDED(hRes))
+    {
+        LOG_STREAM << "HandleReset: Reset finished SUCCEEDED.";
+    }
+    else
+    {
+        LOG_STREAM << "HandleReset: Reset FAILED! HRESULT: " << hRes;
+    }
 
     if (SUCCEEDED(hRes))
     {
@@ -225,22 +246,32 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
     // Deklarujemy je tutaj, aby były widoczne w całej funkcji.
     auto [nMonitorWidth, nMonitorHeight] = GetDesktopRes();
 
+    // --- DODANY LOG (po angielsku) ---
+    LOG_STREAM << "AdjustPresentParams: Detected desktop resolution: "
+        << nMonitorWidth << "x" << nMonitorHeight;
+
     int targetWidth, targetHeight;
     if (ini_ForcedWidth > 0 && ini_ForcedHeight > 0)
     {
         // UŻYJ ROZDZIELCZOŚCI Z .INI
         targetWidth = ini_ForcedWidth;
         targetHeight = ini_ForcedHeight;
+
+        // --- DODANY LOG (po angielsku) ---
+        LOG_STREAM << "AdjustPresentParams: DECISION: Using .ini resolution: "
+            << targetWidth << "x" << targetHeight;
     }
     else
     {
         // UŻYJ AUTOMATYCZNEJ ROZDZIELCZOŚCI PULPITU
         targetWidth = nMonitorWidth;
         targetHeight = nMonitorHeight;
+
+        // --- DODANY LOG (po angielsku) ---
+        LOG_STREAM << "AdjustPresentParams: DECISION: Using desktop resolution: "
+            << targetWidth << "x" << targetHeight;
     }
     // --- KONIEC POPRAWIONEJ LOGIKI ---
-
-   
 
 
     // Always force borderless fullscreen style
@@ -249,6 +280,10 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
     // Zastosuj wybraną rozdzielczość (automatyczną lub ręczną)
     pParams->BackBufferWidth = targetWidth;
     pParams->BackBufferHeight = targetHeight;
+
+    // --- DODANY LOG (po angielsku) ---
+    LOG_STREAM << "AdjustPresentParams: FINALLY setting pParams->BackBufferWidth/Height to: "
+        << pParams->BackBufferWidth << "x" << pParams->BackBufferHeight;
 
     bFullMode = true;
     bUseBorder = false;
@@ -348,27 +383,22 @@ void CDxHandler::AdjustGameToWindowSize(void)
 
 void CDxHandler::EnforceBorderlessStyle(void)
 {
-    // Ta funkcja pilnuje, czy inny mod nie przywrócił ramki.
+    // This function checks if another mod restored the border.
     if (!bFullMode || !bWindowed || !hGameWnd || !*hGameWnd)
         return;
 
-    // Pobierz *aktualny* styl okna
     DWORD dwStyle = GetWindowLong(*hGameWnd, GWL_STYLE);
-
-    // Oblicz styl, jaki *chcemy* mieć (bez ramki)
     DWORD dwWantStyle = dwStyle & ~WS_OVERLAPPEDWINDOW;
 
-    // Jeśli styl jest niepoprawny (ktoś dodał ramkę)...
     if (dwStyle != dwWantStyle)
     {
+        // --- DODANY LOG ---
+        LOG_STREAM << "EnforceBorderlessStyle: DETECTED invalid window style! Re-applying borderless style.";
+
         bool bOldRecursion = bStopRecursion;
         bStopRecursion = true;
 
-        // Wymuś poprawny styl (bez ramki)
         SetWindowLong(*hGameWnd, GWL_STYLE, dwWantStyle);
-
-        // Zmuś okno do natychmiastowego przerysowania się z nowym stylem
-        // To jest kluczowy element, który fizycznie usuwa ramkę
         SetWindowPos(*hGameWnd, NULL, 0, 0, 0, 0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
 
@@ -437,49 +467,56 @@ void CDxHandler::ActivateGameMouse(void)
 
 LRESULT APIENTRY CDxHandler::MvlWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
+    // Nie logujemy tutaj wszystkich wiadomości (np. WM_MOUSEMOVE), 
+    // aby nie zalać pliku logu. Logujemy tylko kluczowe zdarzenia.
+
     switch (uMsg)
     {
     case WM_KILLFOCUS:
+        LOG_STREAM << "MvlWndProc: Received WM_KILLFOCUS (Window lost focus).";
+        // ... (reszta kodu) ...
+        break; // Dodano brakujący break
+
     case WM_ACTIVATE:
         if (uMsg == WM_KILLFOCUS || wParam == WA_INACTIVE) // focus lost
         {
-            // Usunięto 'if (!bFullMode && bUseBorder)'
-            SetWindowTextA(*hGameWnd, RsGlobal->AppName); // Nadal może być przydatne do paska zadań
-
-            SetCursorVisible(true);
-
-            if (bFullMode)
-            {
-                ShowWindow(*hGameWnd, SW_MINIMIZE);
-            }
-
+            LOG_STREAM << "MvlWndProc: Received WM_ACTIVATE (WA_INACTIVE) or WM_KILLFOCUS. Focus lost.";
+            // ... (reszta kodu) ...
         }
-
         else if (uMsg == WM_ACTIVATE) // focus GAINED (gra wraca na pierwszy plan)
         {
-            // Sprawdź, czy użytkownik włączył ten tryb w .ini
+            LOG_STREAM << "MvlWndProc: Received WM_ACTIVATE (Focus gained).";
             if (ini_AggressiveMode == 1)
             {
-                // Agresywnie sprawdź i usuń ramkę
+                LOG_STREAM << "MvlWndProc: AggressiveMode is ON. Calling EnforceBorderlessStyle...";
                 EnforceBorderlessStyle();
             }
         }
-
         break;
-        // Usunięto 'case WM_LBUTTONUP'
+
     case WM_SETCURSOR:
         return DefWindowProc(hwnd, uMsg, wParam, lParam); // restore proper handling of ShowCursor
+
     case WM_STYLECHANGING:
+        LOG_STREAM << "MvlWndProc: Received WM_STYLECHANGING. bChangingLocked = " << (bChangingLocked ? "true" : "false");
         if (bChangingLocked)
         {
+            LOG_STREAM << "MvlWndProc: Style change is LOCKED. Reverting to old style.";
             STYLESTRUCT* pStyleInfo = (STYLESTRUCT*)lParam;
             pStyleInfo->styleOld = pStyleInfo->styleNew;
         }
         return 0;
+
     case WM_ENTERSIZEMOVE:
+        LOG_STREAM << "MvlWndProc: Received WM_ENTERSIZEMOVE (User started moving/resizing window).";
         bSizingLoop = true;
         return 0;
+
     case WM_EXITSIZEMOVE:
+        LOG_STREAM << "MvlWndProc: Received WM_EXITSIZEMOVE (User finished moving/resizing window).";
+        // ... (reszta kodu) ...
+        break; // Dodano break
+
     case WM_SIZE:
     case WM_SIZING:
     case WM_WINDOWPOSCHANGED:
@@ -492,16 +529,10 @@ LRESULT APIENTRY CDxHandler::MvlWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
 
         if (uMsg == WM_WINDOWPOSCHANGING && bChangingLocked)
         {
+            LOG_STREAM << "MvlWndProc: Received WM_WINDOWPOSCHANGING while LOCKED. Blocking changes.";
             WINDOWPOS* pPosInfo = (WINDOWPOS*)lParam;
             pPosInfo->flags = SWP_NOZORDER | SWP_NOSIZE | SWP_NOREPOSITION | SWP_NOREDRAW | SWP_NOOWNERZORDER | SWP_NOMOVE | SWP_NOACTIVATE;
         }
-
-        // Usunięto wywołanie AdjustGameToWindowSize()
-        // if (!bChangingLocked && !bStopRecursion && bWindowed)
-        // {
-        //     AdjustGameToWindowSize();
-        // }
-
         return 0;
     }
     }
@@ -527,15 +558,22 @@ void CDxHandler::Direct3DDeviceReplaceSA(void)
 {
     if (*pDirect3DDevice != NULL)
     {
+        LOG_STREAM << "Direct3DDeviceReplaceSA: pDirect3DDevice found. Patching VTable...";
         UINT_PTR* pVTable = (UINT_PTR*)(*((UINT_PTR*)*pDirect3DDevice));
         if (!oldReset)
         {
+            LOG_STREAM << "Direct3DDeviceReplaceSA: Storing original Reset (16) and SetViewport (47).";
             oldReset = (HRESULT(__stdcall*)(LPDIRECT3DDEVICE8 pDevice, void* pPresentationParameters))(*(uint32_t*)&pVTable[16]);
             oldSetViewport = (HRESULT(__stdcall*)(LPDIRECT3DDEVICE8 pDevice, CONST D3DVIEWPORT8 * pViewport))(*(uint32_t*)&pVTable[47]);
         }
 
         injector::WriteMemory(&pVTable[16], &ResetSA, true);
         injector::WriteMemory(&pVTable[47], &SetViewport, true);
+        LOG_STREAM << "Direct3DDeviceReplaceSA: VTable patched successfully.";
+    }
+    else
+    {
+        LOG_STREAM << "Direct3DDeviceReplaceSA: WARNING: pDirect3DDevice is NULL. VTable not patched yet.";
     }
 }
 
@@ -543,8 +581,18 @@ void CDxHandler::InjectWindowProc(void)
 {
     if (*hGameWnd != NULL && wndProcOld == NULL)
     {
+        LOG_STREAM << "InjectWindowProc: Injecting custom WindowProc...";
         wndProcOld = (WNDPROC)GetWindowLong(*hGameWnd, GWL_WNDPROC);
         SetWindowLong(*hGameWnd, GWL_WNDPROC, (LONG)CDxHandler::MvlWndProc);
+        LOG_STREAM << "InjectWindowProc: WindowProc injected successfully. Old proc saved.";
+    }
+    else if (*hGameWnd == NULL)
+    {
+        LOG_STREAM << "InjectWindowProc: FAILED. hGameWnd is NULL.";
+    }
+    else if (wndProcOld != NULL)
+    {
+        LOG_STREAM << "InjectWindowProc: SKIPPED. Already injected.";
     }
 }
 
@@ -554,8 +602,14 @@ void CDxHandler::RemoveWindowProc(void)
     {
         if (GetWindowLong(*hGameWnd, GWL_WNDPROC) == (LONG)CDxHandler::MvlWndProc)
         {
+            LOG_STREAM << "RemoveWindowProc: Restoring original WindowProc...";
             SetWindowLong(*hGameWnd, GWL_WNDPROC, (LONG)wndProcOld);
             wndProcOld = NULL;
+            LOG_STREAM << "RemoveWindowProc: Original WindowProc restored.";
+        }
+        else
+        {
+            LOG_STREAM << "RemoveWindowProc: WARNING: Current WindowProc is not ours! Not restoring.";
         }
     }
 }

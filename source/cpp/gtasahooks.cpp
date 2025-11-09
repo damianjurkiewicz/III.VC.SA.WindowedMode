@@ -1,7 +1,10 @@
+﻿#include "Logger.h" 
 #include "dxhandler.h"
 
 void CDxHandler::SetupHooksSA(void)
 {
+	LOG_STREAM << "SetupHooksSA: Initializing San Andreas hooks...";
+
 	bInGameSA = true;
 	CPostEffectsDoScreenModeDependentInitializations = (void(*)())0x7046D0;
 	CPostEffectsSetupBackBufferVertex = (void(*)())0x7043D0;
@@ -24,12 +27,21 @@ void CDxHandler::SetupHooksSA(void)
 	HookParams = 0xC9C040;
 	RsGlobal = (RsGlobalType*)0xC17040;
 
+	LOG_STREAM << "SetupHooksSA: All game pointers and addresses assigned.";
+
+	// --- Hook 1 ---
+	LOG_STREAM << "SetupHooksSA: Hooking Direct3DDeviceReplacer (MakeJMP)...";
 	injector::MakeJMP(0x7F6781, HookDirect3DDeviceReplacerSA, true);
 	HookDirect3DDeviceReplacerJmp = 0x7F6786;
 
+	LOG_STREAM << "SetupHooksSA: Calling Direct3DDeviceReplaceSA()...";
 	Direct3DDeviceReplaceSA();
+	LOG_STREAM << "SetupHooksSA: Calling InjectWindowProc()...";
 	InjectWindowProc();
+	LOG_STREAM << "SetupHooksSA: WindowProc injected.";
 
+	// --- Hook 2 (Mouse Updater) ---
+	LOG_STREAM << "SetupHooksSA: Hooking Mouse Updater (Inline)...";
 	struct HookDxMouseUpdater
 	{
 		void operator()(injector::reg_pack& regs)
@@ -41,6 +53,8 @@ void CDxHandler::SetupHooksSA(void)
 
 		}
 	}; injector::MakeInline<HookDxMouseUpdater>(0x53F417);
+	LOG_STREAM << "SetupHooksSA: - HookDxMouseUpdater applied.";
+
 
 	//struct HookDxInputCreateDevice
 	//{
@@ -57,6 +71,8 @@ void CDxHandler::SetupHooksSA(void)
 	//	}
 	//}; injector::MakeInline<HookDxInputCreateDevice>(0x7469A0);
 
+	// --- Hook 3 (Camera Clear Fix) ---
+	LOG_STREAM << "SetupHooksSA: Hooking Camera Clear Fix (Inline)...";
 	struct HookDxCameraClearFix
 	{
 		void operator()(injector::reg_pack& regs)
@@ -68,9 +84,15 @@ void CDxHandler::SetupHooksSA(void)
 			CDxHandler::MainCameraRebuildRaster(pCamera);
 		}
 	}; injector::MakeInline<HookDxCameraClearFix>(0x7F7C41, 0x7F7C41 + 7);
+	LOG_STREAM << "SetupHooksSA: - HookDxCameraClearFix applied.";
 
+	// --- Hook 4 (NOP) ---
+	LOG_STREAM << "SetupHooksSA: Applying NOP at 0x7481CD...";
 	injector::MakeNOP(0x7481CD, 16, true);
+	LOG_STREAM << "SetupHooksSA: - NOP applied.";
 
+	// --- Hook 5 (Reload) ---
+	LOG_STREAM << "SetupHooksSA: Hooking DxReload (Inline)...";
 	struct HookDxReload
 	{
 		void operator()(injector::reg_pack& regs)
@@ -85,7 +107,10 @@ void CDxHandler::SetupHooksSA(void)
 			bStopRecursion = false;
 		}
 	}; injector::MakeInline<HookDxReload>(0x748C60);
+	LOG_STREAM << "SetupHooksSA: - HookDxReload applied.";
 
+	// --- Hook 6 (Resolution Change) ---
+	LOG_STREAM << "SetupHooksSA: Hooking ResChangeJmp (Inline)...";
 	struct HookResChangeJmp
 	{
 		void operator()(injector::reg_pack& regs)
@@ -96,4 +121,8 @@ void CDxHandler::SetupHooksSA(void)
 			CDxHandler::AdjustPresentParams((D3DPRESENT_PARAMETERS_D3D9*)HookParams); // menu
 		}
 	}; injector::MakeInline<HookResChangeJmp>(0x748D1A);
+	LOG_STREAM << "SetupHooksSA: - HookResChangeJmp applied.";
+
+
+	LOG_STREAM << "SetupHooksSA: All San Andreas hooks applied successfully.";
 }
