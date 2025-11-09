@@ -38,7 +38,7 @@ void CDxHandler::SetupHooksSA(void)
 	Direct3DDeviceReplaceSA();
 	LOG_STREAM << "SetupHooksSA: Calling InjectWindowProc()...";
 	InjectWindowProc();
-	LOG_STREAM << "SetupHooksSA: WindowProc injected.";
+
 
 	// --- Hook 2 (Mouse Updater) ---
 	LOG_STREAM << "SetupHooksSA: Hooking Mouse Updater (Inline)...";

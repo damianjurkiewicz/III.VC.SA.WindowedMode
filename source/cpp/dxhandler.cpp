@@ -718,6 +718,33 @@ int CDxHandler::ProcessMouseState(void)
     return 1;
 }
 
+
+// --- NOWE FUNKCJE POMOCNICZE DO LOGOWANIA ---
+// Te funkcje NIE SĄ 'naked', więc mogą bezpiecznie używać LOG_STREAM
+
+void LogCreateDeviceStart()
+{
+    LOG_STREAM << "HookDirect3DDeviceReplacerSA: START. Calling AdjustPresentParams before CreateDevice...";
+}
+
+// 'hRes' zostanie przekazany z rejestru EAX po wywołaniu oryginalnej funkcji
+void LogCreateDeviceEnd(HRESULT hRes)
+{
+    LOG_STREAM << "HookDirect3DDeviceReplacerSA: Original CreateDevice finished. HRESULT: " << hRes;
+    if (SUCCEEDED(hRes))
+    {
+        LOG_STREAM << "HookDirect3DDeviceReplacerSA: CreateDevice hook finished SUCCEEDED.";
+    }
+    else
+    {
+        LOG_STREAM << "HookDirect3DDeviceReplacerSA: CreateDevice hook finished FAILED.";
+    }
+}
+// --- KONIEC NOWYCH FUNKCJI ---
+
+// --- POPRAWIONA FUNKCJA NAKED ---
+// Przywracamy __declspec(naked) i wywołujemy nasze pomocnicze funkcje
+
 void __declspec(naked) CDxHandler::HookDirect3DDeviceReplacerSA(void)
 {
     static HRESULT hRes;
@@ -725,6 +752,11 @@ void __declspec(naked) CDxHandler::HookDirect3DDeviceReplacerSA(void)
     static bool bOldLocked;
 
     _asm pushad
+
+    // --- POPRAWKA ---
+    // Zamiast LOG_STREAM, bezpiecznie wywołujemy naszą funkcję pomocniczą
+    _asm call LogCreateDeviceStart
+    // --- KONIEC POPRAWKI ---
 
     bOldRecursion = bStopRecursion;
     bStopRecursion = true;
@@ -738,9 +770,16 @@ void __declspec(naked) CDxHandler::HookDirect3DDeviceReplacerSA(void)
     bChangingLocked = true;
 
     _asm popad
-    _asm call[edx + 40h]
-        _asm mov hRes, eax
+    _asm call[edx + 40h] // Wywołanie oryginalnego CreateDevice
+        _asm mov hRes, eax   // Zapisz HRESULT (jest w EAX)
     _asm pushad
+
+    // --- POPRAWKA ---
+    // Przekazujemy HRESULT (który jest w EAX) jako argument do naszej funkcji
+    _asm push eax // Umieść HRESULT na stosie jako argument
+    _asm call LogCreateDeviceEnd // Wywołaj drugą funkcję logującą
+    _asm add esp, 4 // Wyczyść stos (usuń argument, który dodaliśmy)
+    // --- KONIEC POPRAWKI ---
 
     bChangingLocked = bOldLocked;
     InjectWindowProc();
