@@ -66,6 +66,8 @@ int CDxHandler::ini_Flags = -1;
 int CDxHandler::ini_ForcedWidth = -1;
 int CDxHandler::ini_ForcedHeight = -1;
 int CDxHandler::ini_AggressiveMode = 0;
+int CDxHandler::ini_EnableLogger = 1;
+ 
 
 std::tuple<int32_t, int32_t> GetDesktopRes()
 {
@@ -90,6 +92,7 @@ void SetCursorVisible(bool state)
     }
 }
 
+// W dxhandler.cpp
 void CDxHandler::ProcessIni(void)
 {
     ini_BackBufferFormat = iniReader.ReadInteger("Direct3D", "BackBufferFormat", -1);
@@ -105,6 +108,20 @@ void CDxHandler::ProcessIni(void)
     ini_ForcedWidth = iniReader.ReadInteger("Resolution", "Width", -1);
     ini_ForcedHeight = iniReader.ReadInteger("Resolution", "Height", -1);
     ini_AggressiveMode = iniReader.ReadInteger("Tweaks", "AggressiveBorderless", 0);
+
+
+    ini_EnableLogger = iniReader.ReadInteger("Tweaks", "EnableLogger", 1);
+
+
+    SimpleLogger::GetInstance().SetEnabled(ini_EnableLogger != 0);
+
+
+    LOG_STREAM << "Logger initialized. Logging enabled: " << (ini_EnableLogger != 0);
+
+
+
+    LOG_STREAM << "ProcessIni: Loaded forced resolution from .ini: "
+        << ini_ForcedWidth << "x" << ini_ForcedHeight;
 }
 
 template<class D3D_TYPE>

@@ -106,5 +106,7 @@ public:
     static int ini_ForcedWidth;
     static int ini_ForcedHeight;
     static int ini_AggressiveMode;
- 
+    static int ini_EnableLogger;
+
+
 };

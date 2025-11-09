@@ -8,27 +8,39 @@ SimpleLogger& SimpleLogger::GetInstance()
     return instance;
 }
 
-SimpleLogger::SimpleLogger()
+// --- NOWA FUNKCJA ---
+void SimpleLogger::SetEnabled(bool state)
+{
+    bEnabled = state;
+}
+
+// --- NOWA FUNKCJA ---
+bool SimpleLogger::IsEnabled() const
+{
+    return bEnabled;
+}
+
+SimpleLogger::SimpleLogger() : bEnabled(true) // Domyślnie włączony
 {
     logFile.open("COMP.WindowedMode.log", std::ios::out | std::ios::trunc);
-    if (logFile.is_open())
-    {
-        Log("Logger initialized.");
-    }
+    // celowo nie logujemy tutaj "Logger initialized."
+    // Zrobimy to w ProcessIni PO wczytaniu ustawień.
 }
 
 SimpleLogger::~SimpleLogger()
 {
     if (logFile.is_open())
     {
-        Log("Logger shutting down.");
+        // Ten log pojawi się tylko jeśli logger jest wciąż włączony
+        LOG_STREAM << "Logger shutting down.";
         logFile.close();
     }
 }
 
 void SimpleLogger::Log(const std::string& message)
 {
-    if (!logFile.is_open()) return;
+    // Dodatkowe sprawdzenie, choć makro powinno już to załatwić
+    if (!bEnabled || !logFile.is_open()) return;
 
     auto now = std::chrono::system_clock::now();
     auto in_time_t = std::chrono::system_clock::to_time_t(now);

@@ -10,6 +10,18 @@ public:
     static SimpleLogger& GetInstance();
     void Log(const std::string& message);
 
+    // --- TEGO BRAKUJE W TWOIM PLIKU ---
+    /**
+     * @brief Włącza lub wyłącza logowanie.
+     */
+    void SetEnabled(bool state);
+
+    /**
+     * @brief Sprawdza, czy logowanie jest włączone.
+     */
+    bool IsEnabled() const;
+    // --- KONIEC ---
+
     SimpleLogger(const SimpleLogger&) = delete;
     SimpleLogger& operator=(const SimpleLogger&) = delete;
 
@@ -18,6 +30,9 @@ private:
     ~SimpleLogger();
 
     std::ofstream logFile;
+
+    // --- TEGO TEŻ BRAKUJE ---
+    bool bEnabled; // Przełącznik loggera
 };
 
 class LogStream
@@ -39,4 +54,5 @@ private:
     std::stringstream stream;
 };
 
-#define LOG_STREAM LogStream()
+// --- I TA ZMIANA JEST KRYTYCZNA ---
+#define LOG_STREAM if (!SimpleLogger::GetInstance().IsEnabled()) {} else LogStream()
