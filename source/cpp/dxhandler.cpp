@@ -1,4 +1,6 @@
-﻿#include "dxhandler.h"
+#include "dxhandler.h"
+#include <cstdarg>
+#include <cstdio>
 
 const bool FORCE_FULLSCREEN_MODE = true;
 
@@ -63,6 +65,145 @@ int CDxHandler::ini_RefreshRateInHz = -1;
 int CDxHandler::ini_MultiSampleQuality = -1;
 int CDxHandler::ini_Flags = -1;
 
+std::ofstream CDxHandler::mLogStream;
+std::mutex CDxHandler::mLogMutex;
+bool CDxHandler::bLoggerInitialized = false;
+std::string CDxHandler::sLogPath;
+
+std::string CDxHandler::GetTimeStamp()
+{
+    SYSTEMTIME systemTime{};
+    GetLocalTime(&systemTime);
+
+    char buffer[64] = {};
+    std::snprintf(buffer, sizeof(buffer), "[%04u-%02u-%02u %02u:%02u:%02u.%03u]",
+        static_cast<unsigned>(systemTime.wYear), static_cast<unsigned>(systemTime.wMonth), static_cast<unsigned>(systemTime.wDay),
+        static_cast<unsigned>(systemTime.wHour), static_cast<unsigned>(systemTime.wMinute), static_cast<unsigned>(systemTime.wSecond),
+        static_cast<unsigned>(systemTime.wMilliseconds));
+
+    return std::string(buffer);
+}
+
+std::string CDxHandler::BuildLogPath(HMODULE moduleHandle)
+{
+    char modulePath[MAX_PATH] = {};
+    std::string result = "WindowedMode.log";
+
+    if (moduleHandle && GetModuleFileNameA(moduleHandle, modulePath, MAX_PATH) != 0)
+    {
+        std::string path(modulePath);
+        auto separator = path.find_last_of("\\/");
+        if (separator != std::string::npos)
+        {
+            path.erase(separator + 1);
+        }
+        else
+        {
+            path.clear();
+        }
+
+        result = path + "WindowedMode.log";
+    }
+
+    return result;
+}
+
+void CDxHandler::InitializeLogger(HMODULE moduleHandle)
+{
+    std::lock_guard<std::mutex> lock(mLogMutex);
+
+    if (bLoggerInitialized && mLogStream.is_open())
+    {
+        return;
+    }
+
+    sLogPath = BuildLogPath(moduleHandle);
+
+    mLogStream.open(sLogPath.c_str(), std::ios::out | std::ios::app);
+
+    if (!mLogStream.is_open())
+    {
+        bLoggerInitialized = false;
+        return;
+    }
+
+    bLoggerInitialized = true;
+    mLogStream << "\n========== WindowedMode logger started: " << GetTimeStamp() << " ==========" << std::endl;
+    mLogStream.flush();
+}
+
+void CDxHandler::ShutdownLogger(void)
+{
+    std::lock_guard<std::mutex> lock(mLogMutex);
+
+    if (mLogStream.is_open())
+    {
+        mLogStream << GetTimeStamp() << " Logger shutting down." << std::endl;
+        mLogStream.flush();
+        mLogStream.close();
+    }
+
+    bLoggerInitialized = false;
+    sLogPath.clear();
+}
+
+void CDxHandler::LogMessage(const char* fmt, ...)
+{
+    std::lock_guard<std::mutex> lock(mLogMutex);
+
+    if (!mLogStream.is_open())
+    {
+        return;
+    }
+
+    char buffer[1024] = {};
+
+    va_list args;
+    va_start(args, fmt);
+    std::vsnprintf(buffer, sizeof(buffer), fmt, args);
+    va_end(args);
+
+    mLogStream << GetTimeStamp() << " " << buffer << std::endl;
+    mLogStream.flush();
+}
+
+void CDxHandler::LogPresentParameters(const char* stage, const D3DPRESENT_PARAMETERS& params)
+{
+    LogMessage("%s - BackBuffer=%ux%u Format=%u Count=%u MSAAType=%u SwapEffect=%u Windowed=%u AutoDepth=%u DepthFormat=%u Flags=0x%X RefreshRate=%u Interval=%u",
+        stage,
+        params.BackBufferWidth,
+        params.BackBufferHeight,
+        params.BackBufferFormat,
+        params.BackBufferCount,
+        params.MultiSampleType,
+        params.SwapEffect,
+        params.Windowed,
+        params.EnableAutoDepthStencil,
+        params.AutoDepthStencilFormat,
+        params.Flags,
+        params.FullScreen_RefreshRateInHz,
+        params.FullScreen_PresentationInterval);
+}
+
+void CDxHandler::LogPresentParameters(const char* stage, const D3DPRESENT_PARAMETERS_D3D9& params)
+{
+    LogMessage("%s - BackBuffer=%ux%u Format=%u Count=%u MSAAType=%u MSAAQuality=%lu SwapEffect=%u Windowed=%u AutoDepth=%u DepthFormat=%u Flags=0x%X RefreshRate=%u Interval=%u",
+        stage,
+        params.BackBufferWidth,
+        params.BackBufferHeight,
+        params.BackBufferFormat,
+        params.BackBufferCount,
+        params.MultiSampleType,
+        static_cast<unsigned long>(params.MultiSampleQuality),
+        params.SwapEffect,
+        params.Windowed,
+        params.EnableAutoDepthStencil,
+        params.AutoDepthStencilFormat,
+        params.Flags,
+        params.FullScreen_RefreshRateInHz,
+        params.FullScreen_PresentationInterval);
+}
+
 std::tuple<int32_t, int32_t> GetDesktopRes()
 {
     HMONITOR monitor = MonitorFromWindow(GetDesktopWindow(), MONITOR_DEFAULTTONEAREST);
@@ -88,6 +229,8 @@ void SetCursorVisible(bool state)
 
 void CDxHandler::ProcessIni(void)
 {
+    LogMessage("ProcessIni: Loading configuration from WindowedMode.ini");
+
     ini_BackBufferFormat = iniReader.ReadInteger("Direct3D", "BackBufferFormat", -1);
     ini_EnableAutoDepthStencil = iniReader.ReadInteger("Direct3D", "EnableAutoDepthStencil", -1);
     ini_AutoDepthStencilFormat = iniReader.ReadInteger("Direct3D", "AutoDepthStencilFormat", -1);
@@ -98,6 +241,29 @@ void CDxHandler::ProcessIni(void)
     ini_RefreshRateInHz = iniReader.ReadInteger("Direct3D", "RefreshRateInHz", -1);
     ini_MultiSampleQuality = iniReader.ReadInteger("Direct3D", "MultiSampleQuality", -1);
     ini_Flags = iniReader.ReadInteger("Direct3D", "Flags", -1);
+
+    auto logEntry = [](const char* name, int value)
+    {
+        if (value == -1)
+        {
+            CDxHandler::LogMessage("ProcessIni: %s = default", name);
+        }
+        else
+        {
+            CDxHandler::LogMessage("ProcessIni: %s = %d", name, value);
+        }
+    };
+
+    logEntry("BackBufferFormat", ini_BackBufferFormat);
+    logEntry("EnableAutoDepthStencil", ini_EnableAutoDepthStencil);
+    logEntry("AutoDepthStencilFormat", ini_AutoDepthStencilFormat);
+    logEntry("BackBufferCount", ini_BackBufferCount);
+    logEntry("MultiSampleType", ini_MultiSampleType);
+    logEntry("SwapEffect", ini_SwapEffect);
+    logEntry("PresentationInterval", ini_PresentationInterval);
+    logEntry("RefreshRateInHz", ini_RefreshRateInHz);
+    logEntry("MultiSampleQuality", ini_MultiSampleQuality);
+    logEntry("Flags", ini_Flags);
 }
 
 template<class D3D_TYPE>
@@ -109,6 +275,9 @@ HRESULT CDxHandler::HandleReset(D3D_TYPE* pPresentationParameters, void* pSource
     }
 
     CDxHandler::nResetCounter++;
+
+    LogMessage("HandleReset: invoked (count=%d) from address=0x%p", CDxHandler::nResetCounter, pSourceAddress);
+    LogPresentParameters("HandleReset (applied)", *pPresentationParameters);
 
     bool bInitialLocked = CDxHandler::bChangingLocked;
     if (!bInitialLocked) CDxHandler::StoreRestoreWindowInfo(false);
@@ -125,6 +294,15 @@ HRESULT CDxHandler::HandleReset(D3D_TYPE* pPresentationParameters, void* pSource
         int nModeIndex = RwEngineGetCurrentVideoMode();
         (*CDxHandler::pDisplayModes)[nModeIndex].nWidth = pPresentationParameters->BackBufferWidth;
         (*CDxHandler::pDisplayModes)[nModeIndex].nHeight = pPresentationParameters->BackBufferHeight;
+
+        LogMessage("HandleReset: succeeded, back buffer updated to %dx%d (mode index %d)",
+            pPresentationParameters->BackBufferWidth,
+            pPresentationParameters->BackBufferHeight,
+            nModeIndex);
+    }
+    else
+    {
+        LogMessage("HandleReset: failed with HRESULT=0x%08X", hRes);
     }
 
     return hRes;
@@ -134,6 +312,8 @@ template<class D3D_TYPE>
 void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
 {
     if (!bWindowed) return;
+
+    LogPresentParameters("AdjustPresentParams (before)", *pParams);
 
     bool bOldRecursion = bStopRecursion;
 
@@ -214,6 +394,7 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
     DWORD dwWndStyle = GetWindowLong(*hGameWnd, GWL_STYLE);
 
     auto [nMonitorWidth, nMonitorHeight] = GetDesktopRes();
+    LogMessage("AdjustPresentParams: Desktop resolution detected as %dx%d", nMonitorWidth, nMonitorHeight);
 
     // Always force borderless fullscreen style
     dwWndStyle &= ~WS_OVERLAPPEDWINDOW;
@@ -228,6 +409,12 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
 
     RsGlobal->MaximumWidth = pParams->BackBufferWidth;
     RsGlobal->MaximumHeight = pParams->BackBufferHeight;
+
+    LogMessage("AdjustPresentParams: Applying fullscreen window %dx%d (borderless=%s, menus=%s)",
+        nCurrentWidth,
+        nCurrentHeight,
+        !bUseBorder ? "true" : "false",
+        bUseMenus ? "true" : "false");
 
     bRequestFullMode = false;
 
@@ -253,6 +440,8 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
 
     pParams->hDeviceWindow = *hGameWnd;
     bResChanged = true;
+
+    LogPresentParameters("AdjustPresentParams (after)", *pParams);
 }
 
 void CDxHandler::ToggleFullScreen(void)
@@ -324,10 +513,13 @@ void CDxHandler::MainCameraRebuildRaster(RwCamera* pCamera)
         {
             (*CDxHandler::pDisplayModes)[nModeIndex].nWidth = (int)stSurfaceDesc.Width;
             (*CDxHandler::pDisplayModes)[nModeIndex].nHeight = (int)stSurfaceDesc.Height;
+            LogMessage("MainCameraRebuildRaster: Updated display mode %d to %ux%u", nModeIndex, stSurfaceDesc.Width, stSurfaceDesc.Height);
         }
 
         int nGameWidth = (*CDxHandler::pDisplayModes)[nModeIndex].nWidth;
         int nGameHeight = (*CDxHandler::pDisplayModes)[nModeIndex].nHeight;
+
+        LogMessage("MainCameraRebuildRaster: Current camera size %dx%d", nGameWidth, nGameHeight);
 
         *(int*)RwD3D8AdapterInformation_DisplayMode = nGameWidth;
         *(int*)(RwD3D8AdapterInformation_DisplayMode + 4) = nGameHeight;
@@ -336,22 +528,26 @@ void CDxHandler::MainCameraRebuildRaster(RwCamera* pCamera)
         {
             RwRasterDestroy(pCamera->frameBuffer);
             pCamera->frameBuffer = NULL;
+            LogMessage("MainCameraRebuildRaster: Destroyed outdated frame buffer raster");
         }
 
         if (!pCamera->frameBuffer)
         {
             pCamera->frameBuffer = RwRasterCreate(nGameWidth, nGameHeight, 32, rwRASTERTYPECAMERA);
+            LogMessage("MainCameraRebuildRaster: Created frame buffer raster %dx%d", nGameWidth, nGameHeight);
         }
 
         if (pCamera->zBuffer && (pCamera->zBuffer->nWidth != nGameWidth || pCamera->zBuffer->nHeight != nGameHeight))
         {
             RwRasterDestroy(pCamera->zBuffer);
             pCamera->zBuffer = NULL;
+            LogMessage("MainCameraRebuildRaster: Destroyed outdated z-buffer raster");
         }
 
         if (!pCamera->zBuffer)
         {
             pCamera->zBuffer = RwRasterCreate(nGameWidth, nGameHeight, 0, rwRASTERTYPEZBUFFER);
+            LogMessage("MainCameraRebuildRaster: Created z-buffer raster %dx%d", nGameWidth, nGameHeight);
         }
     }
 }
@@ -445,10 +641,18 @@ void CDxHandler::Direct3DDeviceReplaceSA(void)
         {
             oldReset = (HRESULT(__stdcall*)(LPDIRECT3DDEVICE8 pDevice, void* pPresentationParameters))(*(uint32_t*)&pVTable[16]);
             oldSetViewport = (HRESULT(__stdcall*)(LPDIRECT3DDEVICE8 pDevice, CONST D3DVIEWPORT8 * pViewport))(*(uint32_t*)&pVTable[47]);
+
+            LogMessage("Direct3DDeviceReplaceSA: Captured original Reset=0x%p SetViewport=0x%p", oldReset, oldSetViewport);
         }
 
         injector::WriteMemory(&pVTable[16], &ResetSA, true);
         injector::WriteMemory(&pVTable[47], &SetViewport, true);
+
+        LogMessage("Direct3DDeviceReplaceSA: Patched device vtable at %p", pVTable);
+    }
+    else
+    {
+        LogMessage("Direct3DDeviceReplaceSA: Direct3D device pointer is null, skipping patch");
     }
 }
 
@@ -458,6 +662,7 @@ void CDxHandler::InjectWindowProc(void)
     {
         wndProcOld = (WNDPROC)GetWindowLong(*hGameWnd, GWL_WNDPROC);
         SetWindowLong(*hGameWnd, GWL_WNDPROC, (LONG)CDxHandler::MvlWndProc);
+        LogMessage("InjectWindowProc: Subclassed window 0x%p", *hGameWnd);
     }
 }
 
@@ -469,6 +674,7 @@ void CDxHandler::RemoveWindowProc(void)
         {
             SetWindowLong(*hGameWnd, GWL_WNDPROC, (LONG)wndProcOld);
             wndProcOld = NULL;
+            LogMessage("RemoveWindowProc: Restored original window procedure for 0x%p", *hGameWnd);
         }
     }
 }
