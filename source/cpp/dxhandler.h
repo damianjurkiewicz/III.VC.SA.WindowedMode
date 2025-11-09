@@ -1,9 +1,6 @@
 
 #pragma once
 #include "misc.h"
-#include <fstream>
-#include <mutex>
-#include <string>
 
 class CDxHandler
 {
@@ -27,11 +24,6 @@ public:
     static void HookDirect3DDeviceReplacerSA(void);
     static void SetupHooksSA(void);
     static void ProcessIni(void);
-    static void InitializeLogger(HMODULE moduleHandle);
-    static void ShutdownLogger(void);
-    static void LogMessage(const char* fmt, ...);
-    static void LogPresentParameters(const char* stage, const D3DPRESENT_PARAMETERS& params);
-    static void LogPresentParameters(const char* stage, const D3DPRESENT_PARAMETERS_D3D9& params);
     static HRESULT(__stdcall* oldReset)(LPDIRECT3DDEVICE8 pDevice, void* pPresentationParameters);
     static HRESULT(__stdcall* oldSetViewport)(LPDIRECT3DDEVICE8 pDevice, CONST D3DVIEWPORT8* pViewport);
 
@@ -108,13 +100,4 @@ public:
     static int ini_RefreshRateInHz;
     static int ini_MultiSampleQuality;
     static int ini_Flags;
-
-private:
-    static std::string BuildLogPath(HMODULE moduleHandle);
-    static std::string GetTimeStamp();
-
-    static std::ofstream mLogStream;
-    static std::mutex mLogMutex;
-    static bool bLoggerInitialized;
-    static std::string sLogPath;
 };

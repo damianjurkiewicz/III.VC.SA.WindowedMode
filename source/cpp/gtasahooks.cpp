@@ -2,11 +2,10 @@
 
 void CDxHandler::SetupHooksSA(void)
 {
-        bInGameSA = true;
-        LogMessage("SetupHooksSA: Installing hooks for GTA San Andreas");
-        CPostEffectsDoScreenModeDependentInitializations = (void(*)())0x7046D0;
-        CPostEffectsSetupBackBufferVertex = (void(*)())0x7043D0;
-        DxInputGetMouseState = (int(*)(int))0x746ED0;
+	bInGameSA = true;
+	CPostEffectsDoScreenModeDependentInitializations = (void(*)())0x7046D0;
+	CPostEffectsSetupBackBufferVertex = (void(*)())0x7043D0;
+	DxInputGetMouseState = (int(*)(int))0x746ED0;
 	ReinitializeRw = (void(*)(int))0x0;
 	RwEngineGetCurrentVideoMode = (int(*)())0x7F2D20;
 	RwCameraClear = (RwCamera * (*)(RwCamera*, void*, int32_t))0x7EE340;
@@ -25,27 +24,23 @@ void CDxHandler::SetupHooksSA(void)
 	HookParams = 0xC9C040;
 	RsGlobal = (RsGlobalType*)0xC17040;
 
-        injector::MakeJMP(0x7F6781, HookDirect3DDeviceReplacerSA, true);
-        HookDirect3DDeviceReplacerJmp = 0x7F6786;
+	injector::MakeJMP(0x7F6781, HookDirect3DDeviceReplacerSA, true);
+	HookDirect3DDeviceReplacerJmp = 0x7F6786;
 
-        LogMessage("SetupHooksSA: Hooked Direct3DDevice replacer (jmp=0x%X)", HookDirect3DDeviceReplacerJmp);
-
-        Direct3DDeviceReplaceSA();
-        InjectWindowProc();
-        LogMessage("SetupHooksSA: Initial Direct3D device replacement and window proc injection completed");
+	Direct3DDeviceReplaceSA();
+	InjectWindowProc();
 
 	struct HookDxMouseUpdater
 	{
 		void operator()(injector::reg_pack& regs)
 		{
-                        if (CDxHandler::ProcessMouseState() == 0)
-                                *(uintptr_t*)regs.esp = 0x746F60;
+			if (CDxHandler::ProcessMouseState() == 0)
+				*(uintptr_t*)regs.esp = 0x746F60;
 
-                        DxInputGetMouseState(regs.ecx);
+			DxInputGetMouseState(regs.ecx);
 
-                }
-        }; injector::MakeInline<HookDxMouseUpdater>(0x53F417);
-        LogMessage("SetupHooksSA: Installed mouse state hook at 0x53F417");
+		}
+	}; injector::MakeInline<HookDxMouseUpdater>(0x53F417);
 
 	//struct HookDxInputCreateDevice
 	//{
@@ -74,8 +69,7 @@ void CDxHandler::SetupHooksSA(void)
 		}
 	}; injector::MakeInline<HookDxCameraClearFix>(0x7F7C41, 0x7F7C41 + 7);
 
-        injector::MakeNOP(0x7481CD, 16, true);
-        LogMessage("SetupHooksSA: Disabled redundant code at 0x7481CD");
+	injector::MakeNOP(0x7481CD, 16, true);
 
 	struct HookDxReload
 	{
@@ -96,11 +90,10 @@ void CDxHandler::SetupHooksSA(void)
 	{
 		void operator()(injector::reg_pack& regs)
 		{
-                        *(uintptr_t*)(regs.esp) = 0x748DA3;
-                        bInGameSA = true;
+			*(uintptr_t*)(regs.esp) = 0x748DA3;
+			bInGameSA = true;
 
-                        CDxHandler::AdjustPresentParams((D3DPRESENT_PARAMETERS_D3D9*)HookParams); // menu
-                }
-        }; injector::MakeInline<HookResChangeJmp>(0x748D1A);
-        LogMessage("SetupHooksSA: Installed resolution change hook at 0x748D1A");
+			CDxHandler::AdjustPresentParams((D3DPRESENT_PARAMETERS_D3D9*)HookParams); // menu
+		}
+	}; injector::MakeInline<HookResChangeJmp>(0x748D1A);
 }
