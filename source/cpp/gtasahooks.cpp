@@ -2,8 +2,7 @@
 
 void CDxHandler::SetupHooksSA(void)
 {
-        LogMessage("SetupHooksSA: installing San Andreas hooks");
-        bInGameSA = true;
+	bInGameSA = true;
 	CPostEffectsDoScreenModeDependentInitializations = (void(*)())0x7046D0;
 	CPostEffectsSetupBackBufferVertex = (void(*)())0x7043D0;
 	DxInputGetMouseState = (int(*)(int))0x746ED0;
@@ -87,16 +86,14 @@ void CDxHandler::SetupHooksSA(void)
 		}
 	}; injector::MakeInline<HookDxReload>(0x748C60);
 
-        struct HookResChangeJmp
-        {
-                void operator()(injector::reg_pack& regs)
-                {
-                        *(uintptr_t*)(regs.esp) = 0x748DA3;
-                        bInGameSA = true;
+	struct HookResChangeJmp
+	{
+		void operator()(injector::reg_pack& regs)
+		{
+			*(uintptr_t*)(regs.esp) = 0x748DA3;
+			bInGameSA = true;
 
-                        CDxHandler::AdjustPresentParams((D3DPRESENT_PARAMETERS_D3D9*)HookParams); // menu
-                }
-        }; injector::MakeInline<HookResChangeJmp>(0x748D1A);
-
-        LogMessage("SetupHooksSA: San Andreas hooks installed");
+			CDxHandler::AdjustPresentParams((D3DPRESENT_PARAMETERS_D3D9*)HookParams); // menu
+		}
+	}; injector::MakeInline<HookResChangeJmp>(0x748D1A);
 }

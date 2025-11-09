@@ -1,6 +1,4 @@
-#include "dxhandler.h"
-#include <cstdarg>
-#include <cstring>
+﻿#include "dxhandler.h"
 
 const bool FORCE_FULLSCREEN_MODE = true;
 
@@ -65,141 +63,6 @@ int CDxHandler::ini_RefreshRateInHz = -1;
 int CDxHandler::ini_MultiSampleQuality = -1;
 int CDxHandler::ini_Flags = -1;
 
-FILE* CDxHandler::msLogFile = nullptr;
-std::mutex CDxHandler::msLogMutex;
-bool CDxHandler::msLoggerReady = false;
-HMODULE CDxHandler::msLoggerModule = nullptr;
-
-void CDxHandler::EnsureLoggerInitialized(HMODULE moduleHandle)
-{
-    if (msLoggerReady)
-        return;
-
-    std::lock_guard<std::mutex> lock(msLogMutex);
-
-    if (moduleHandle)
-        msLoggerModule = moduleHandle;
-
-    if (msLoggerReady)
-        return;
-
-    HMODULE module = msLoggerModule;
-    if (!module)
-        module = GetModuleHandleA(nullptr);
-
-    char logPath[MAX_PATH] = {};
-
-    if (module && GetModuleFileNameA(module, logPath, MAX_PATH))
-    {
-        char* backslash = std::strrchr(logPath, '\\');
-        char* slash = std::strrchr(logPath, '/');
-        char* separator = backslash;
-        if (!separator || (slash && slash > separator))
-            separator = slash;
-
-        if (separator)
-            *(separator + 1) = '\0';
-        else
-            logPath[0] = '\0';
-
-        std::strncat(logPath, "WindowedMode.log", MAX_PATH - std::strlen(logPath) - 1);
-    }
-    else
-    {
-        std::strncpy(logPath, "WindowedMode.log", MAX_PATH - 1);
-        logPath[MAX_PATH - 1] = '\0';
-    }
-
-    msLoggerModule = module;
-
-    msLogFile = std::fopen(logPath, "a");
-    if (!msLogFile)
-        return;
-
-    setvbuf(msLogFile, nullptr, _IONBF, 0);
-
-    SYSTEMTIME systemTime{};
-    GetLocalTime(&systemTime);
-
-    std::fprintf(msLogFile,
-        "\n[%04u-%02u-%02u %02u:%02u:%02u.%03u] Logger initialized\n",
-        static_cast<unsigned>(systemTime.wYear),
-        static_cast<unsigned>(systemTime.wMonth),
-        static_cast<unsigned>(systemTime.wDay),
-        static_cast<unsigned>(systemTime.wHour),
-        static_cast<unsigned>(systemTime.wMinute),
-        static_cast<unsigned>(systemTime.wSecond),
-        static_cast<unsigned>(systemTime.wMilliseconds));
-    std::fflush(msLogFile);
-
-    msLoggerReady = true;
-}
-
-void CDxHandler::InitializeLogger(HMODULE moduleHandle)
-{
-    EnsureLoggerInitialized(moduleHandle);
-}
-
-void CDxHandler::ShutdownLogger(void)
-{
-    std::lock_guard<std::mutex> lock(msLogMutex);
-
-    if (!msLoggerReady || !msLogFile)
-        return;
-
-    SYSTEMTIME systemTime{};
-    GetLocalTime(&systemTime);
-
-    std::fprintf(msLogFile,
-        "[%04u-%02u-%02u %02u:%02u:%02u.%03u] Logger shutting down\n",
-        static_cast<unsigned>(systemTime.wYear),
-        static_cast<unsigned>(systemTime.wMonth),
-        static_cast<unsigned>(systemTime.wDay),
-        static_cast<unsigned>(systemTime.wHour),
-        static_cast<unsigned>(systemTime.wMinute),
-        static_cast<unsigned>(systemTime.wSecond),
-        static_cast<unsigned>(systemTime.wMilliseconds));
-    std::fflush(msLogFile);
-
-    std::fclose(msLogFile);
-    msLogFile = nullptr;
-    msLoggerReady = false;
-}
-
-void CDxHandler::LogMessage(const char* fmt, ...)
-{
-    EnsureLoggerInitialized(nullptr);
-
-    std::lock_guard<std::mutex> lock(msLogMutex);
-
-    if (!msLoggerReady || !msLogFile || fmt == nullptr)
-        return;
-
-    char buffer[512] = {};
-
-    va_list args;
-    va_start(args, fmt);
-    std::vsnprintf(buffer, sizeof(buffer), fmt, args);
-    va_end(args);
-
-    buffer[sizeof(buffer) - 1] = '\0';
-
-    SYSTEMTIME systemTime{};
-    GetLocalTime(&systemTime);
-
-    std::fprintf(msLogFile,
-        "[%04u-%02u-%02u %02u:%02u:%02u.%03u] %s\n",
-        static_cast<unsigned>(systemTime.wYear),
-        static_cast<unsigned>(systemTime.wMonth),
-        static_cast<unsigned>(systemTime.wDay),
-        static_cast<unsigned>(systemTime.wHour),
-        static_cast<unsigned>(systemTime.wMinute),
-        static_cast<unsigned>(systemTime.wSecond),
-        static_cast<unsigned>(systemTime.wMilliseconds),
-        buffer);
-    std::fflush(msLogFile);
-}
-
 std::tuple<int32_t, int32_t> GetDesktopRes()
 {
     HMONITOR monitor = MonitorFromWindow(GetDesktopWindow(), MONITOR_DEFAULTTONEAREST);
@@ -235,22 +98,6 @@ void CDxHandler::ProcessIni(void)
     ini_RefreshRateInHz = iniReader.ReadInteger("Direct3D", "RefreshRateInHz", -1);
     ini_MultiSampleQuality = iniReader.ReadInteger("Direct3D", "MultiSampleQuality", -1);
     ini_Flags = iniReader.ReadInteger("Direct3D", "Flags", -1);
-
-    LogMessage(
-        "ProcessIni: Direct3D overrides primary set (BackBufferFormat=%d, EnableAutoDepthStencil=%d, AutoDepthStencilFormat=%d, BackBufferCount=%d, MultiSampleType=%d)",
-        ini_BackBufferFormat,
-        ini_EnableAutoDepthStencil,
-        ini_AutoDepthStencilFormat,
-        ini_BackBufferCount,
-        ini_MultiSampleType);
-
-    LogMessage(
-        "ProcessIni: Direct3D overrides secondary set (MultiSampleQuality=%d, SwapEffect=%d, PresentationInterval=%d, RefreshRateInHz=%d, Flags=%d)",
-        ini_MultiSampleQuality,
-        ini_SwapEffect,
-        ini_PresentationInterval,
-        ini_RefreshRateInHz,
-        ini_Flags);
 }
 
 template<class D3D_TYPE>
@@ -262,14 +109,6 @@ HRESULT CDxHandler::HandleReset(D3D_TYPE* pPresentationParameters, void* pSource
     }
 
     CDxHandler::nResetCounter++;
-
-    LogMessage(
-        "HandleReset: request #%d from address %p (BackBuffer=%ux%u, Windowed=%u)",
-        CDxHandler::nResetCounter,
-        pSourceAddress,
-        pPresentationParameters->BackBufferWidth,
-        pPresentationParameters->BackBufferHeight,
-        pPresentationParameters->Windowed);
 
     bool bInitialLocked = CDxHandler::bChangingLocked;
     if (!bInitialLocked) CDxHandler::StoreRestoreWindowInfo(false);
@@ -286,17 +125,6 @@ HRESULT CDxHandler::HandleReset(D3D_TYPE* pPresentationParameters, void* pSource
         int nModeIndex = RwEngineGetCurrentVideoMode();
         (*CDxHandler::pDisplayModes)[nModeIndex].nWidth = pPresentationParameters->BackBufferWidth;
         (*CDxHandler::pDisplayModes)[nModeIndex].nHeight = pPresentationParameters->BackBufferHeight;
-
-        LogMessage(
-            "HandleReset: succeeded (HRESULT=0x%08X) mode %d updated to %ux%u",
-            static_cast<unsigned>(hRes),
-            nModeIndex,
-            pPresentationParameters->BackBufferWidth,
-            pPresentationParameters->BackBufferHeight);
-    }
-    else
-    {
-        LogMessage("HandleReset: failed with HRESULT=0x%08X", static_cast<unsigned>(hRes));
     }
 
     return hRes;
@@ -306,12 +134,6 @@ template<class D3D_TYPE>
 void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
 {
     if (!bWindowed) return;
-
-    LogMessage(
-        "AdjustPresentParams: input BackBuffer=%ux%u Windowed=%u",
-        pParams->BackBufferWidth,
-        pParams->BackBufferHeight,
-        pParams->Windowed);
 
     bool bOldRecursion = bStopRecursion;
 
@@ -393,11 +215,6 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
 
     auto [nMonitorWidth, nMonitorHeight] = GetDesktopRes();
 
-    LogMessage(
-        "AdjustPresentParams: desktop resolution detected as %ux%u",
-        static_cast<unsigned>(nMonitorWidth),
-        static_cast<unsigned>(nMonitorHeight));
-
     // Always force borderless fullscreen style
     dwWndStyle &= ~WS_OVERLAPPEDWINDOW;
     pParams->BackBufferWidth = nMonitorWidth;
@@ -436,12 +253,6 @@ void CDxHandler::AdjustPresentParams(D3D_TYPE* pParams)
 
     pParams->hDeviceWindow = *hGameWnd;
     bResChanged = true;
-
-    LogMessage(
-        "AdjustPresentParams: output BackBuffer=%ux%u Windowed=%u",
-        pParams->BackBufferWidth,
-        pParams->BackBufferHeight,
-        pParams->Windowed);
 }
 
 void CDxHandler::ToggleFullScreen(void)
@@ -513,12 +324,6 @@ void CDxHandler::MainCameraRebuildRaster(RwCamera* pCamera)
         {
             (*CDxHandler::pDisplayModes)[nModeIndex].nWidth = (int)stSurfaceDesc.Width;
             (*CDxHandler::pDisplayModes)[nModeIndex].nHeight = (int)stSurfaceDesc.Height;
-
-            LogMessage(
-                "MainCameraRebuildRaster: updated mode %d to %ux%u from back buffer",
-                nModeIndex,
-                static_cast<unsigned>(stSurfaceDesc.Width),
-                static_cast<unsigned>(stSurfaceDesc.Height));
         }
 
         int nGameWidth = (*CDxHandler::pDisplayModes)[nModeIndex].nWidth;
