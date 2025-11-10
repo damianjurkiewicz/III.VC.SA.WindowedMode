@@ -102,7 +102,7 @@ void CDxHandler::ProcessIni(void)
     ini_MultiSampleType = iniReader.ReadInteger("Direct3D", "MultiSampleType", -1);
     ini_SwapEffect = iniReader.ReadInteger("Direct3D", "SwapEffect", -1);
     ini_PresentationInterval = iniReader.ReadInteger("Direct3D", "PresentationInterval", -1);
-    ini_RefreshRateInHz = iniReader.ReadInteger("Direct3D", "RefreshRateInHz", -1);
+    ini_RefreshRateInHz = iniReader.ReadInteger("Direct3D", "RefreshRateInHz", 0);
     ini_MultiSampleQuality = iniReader.ReadInteger("Direct3D", "MultiSampleQuality", -1);
     ini_Flags = iniReader.ReadInteger("Direct3D", "Flags", -1);
     ini_ForcedWidth = iniReader.ReadInteger("Resolution", "Width", -1);
