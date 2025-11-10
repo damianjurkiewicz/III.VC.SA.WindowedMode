@@ -487,31 +487,26 @@ LRESULT APIENTRY CDxHandler::MvlWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
     switch (uMsg)
     {
     case WM_KILLFOCUS:
-        // --- POPRAWKA ---
-        // Celowo NIE MA 'break;'
-        // Pozwalamy kodowi "przejść" do bloku WM_ACTIVATE,
-        // tak jak w oryginalnej wersji.
         LOG_STREAM << "MvlWndProc: Received WM_KILLFOCUS (Window lost focus).";
+        // Celowy fall-through (brak break)
 
     case WM_ACTIVATE:
         if (uMsg == WM_KILLFOCUS || wParam == WA_INACTIVE) // focus lost
         {
-            // Ten log teraz obsłuży oba przypadki:
-            if (uMsg == WM_KILLFOCUS) {
-                // Już zalogowaliśmy powyżej
-            }
-            else {
+            if (uMsg == WM_ACTIVATE) {
                 LOG_STREAM << "MvlWndProc: Received WM_ACTIVATE (WA_INACTIVE). Focus lost.";
             }
 
             SetWindowTextA(*hGameWnd, RsGlobal->AppName);
             SetCursorVisible(true);
 
+            // --- Przywrócono oryginalną logikę (bez opcji z .ini) ---
             if (bFullMode)
             {
                 LOG_STREAM << "MvlWndProc: Minimizing window due to focus loss.";
                 ShowWindow(*hGameWnd, SW_MINIMIZE);
             }
+            // --- Koniec ---
         }
         else if (uMsg == WM_ACTIVATE) // focus GAINED (gra wraca na pierwszy plan)
         {
@@ -522,10 +517,10 @@ LRESULT APIENTRY CDxHandler::MvlWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
                 EnforceBorderlessStyle();
             }
         }
-        break;
+        break; // <-- POPRAWNIE. Wyjdzie ze switch i przekaże wiadomość dalej.
 
     case WM_SETCURSOR:
-        return DefWindowProc(hwnd, uMsg, wParam, lParam); // restore proper handling of ShowCursor
+        return DefWindowProc(hwnd, uMsg, wParam, lParam); // Specjalna obsługa
 
     case WM_STYLECHANGING:
         LOG_STREAM << "MvlWndProc: Received WM_STYLECHANGING. bChangingLocked = " << (bChangingLocked ? "true" : "false");
@@ -535,18 +530,15 @@ LRESULT APIENTRY CDxHandler::MvlWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
             STYLESTRUCT* pStyleInfo = (STYLESTRUCT*)lParam;
             pStyleInfo->styleOld = pStyleInfo->styleNew;
         }
-        return 0;
+        return 0; // <-- POPRAWNIE. Celowo blokujemy tę wiadomość.
 
     case WM_ENTERSIZEMOVE:
         LOG_STREAM << "MvlWndProc: Received WM_ENTERSIZEMOVE (User started moving/resizing window).";
         bSizingLoop = true;
-        return 0;
+        return 0; // <-- POPRAWNIE. Blokujemy pętlę zmiany rozmiaru.
 
+        // --- Poprawka kompatybilności z innymi modami ---
     case WM_EXITSIZEMOVE:
-        LOG_STREAM << "MvlWndProc: Received WM_EXITSIZEMOVE (User finished moving/resizing window).";
-        bSizingLoop = false; // <-- Przywrócono logikę z Twojego kodu
-        // Musimy przejść do obsługi poniżej
-
     case WM_SIZE:
     case WM_SIZING:
     case WM_WINDOWPOSCHANGED:
@@ -554,6 +546,7 @@ LRESULT APIENTRY CDxHandler::MvlWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
     {
         if (uMsg == WM_EXITSIZEMOVE)
         {
+            LOG_STREAM << "MvlWndProc: Received WM_EXITSIZEMOVE (User finished moving/resizing window).";
             bSizingLoop = false;
         }
 
@@ -563,10 +556,14 @@ LRESULT APIENTRY CDxHandler::MvlWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
             WINDOWPOS* pPosInfo = (WINDOWPOS*)lParam;
             pPosInfo->flags = SWP_NOZORDER | SWP_NOSIZE | SWP_NOREPOSITION | SWP_NOREDRAW | SWP_NOOWNERZORDER | SWP_NOMOVE | SWP_NOACTIVATE;
         }
-        return 0;
+
+        // ZMIENIONO z 'return 0;' na 'break;', aby przekazać wiadomość dalej.
+        break;
     }
+    // --- Koniec poprawki ---
     }
 
+    // Domyślna akcja: przekaż wiadomość do następnego haka w łańcuchu (np. moda od pauzy)
     return CallWindowProc(wndProcOld, hwnd, uMsg, wParam, lParam);
 }
 
