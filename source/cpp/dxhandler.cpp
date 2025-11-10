@@ -484,21 +484,34 @@ void CDxHandler::ActivateGameMouse(void)
 
 LRESULT APIENTRY CDxHandler::MvlWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    // Nie logujemy tutaj wszystkich wiadomości (np. WM_MOUSEMOVE), 
-    // aby nie zalać pliku logu. Logujemy tylko kluczowe zdarzenia.
-
     switch (uMsg)
     {
     case WM_KILLFOCUS:
+        // --- POPRAWKA ---
+        // Celowo NIE MA 'break;'
+        // Pozwalamy kodowi "przejść" do bloku WM_ACTIVATE,
+        // tak jak w oryginalnej wersji.
         LOG_STREAM << "MvlWndProc: Received WM_KILLFOCUS (Window lost focus).";
-        // ... (reszta kodu) ...
-        break; // Dodano brakujący break
 
     case WM_ACTIVATE:
         if (uMsg == WM_KILLFOCUS || wParam == WA_INACTIVE) // focus lost
         {
-            LOG_STREAM << "MvlWndProc: Received WM_ACTIVATE (WA_INACTIVE) or WM_KILLFOCUS. Focus lost.";
-            // ... (reszta kodu) ...
+            // Ten log teraz obsłuży oba przypadki:
+            if (uMsg == WM_KILLFOCUS) {
+                // Już zalogowaliśmy powyżej
+            }
+            else {
+                LOG_STREAM << "MvlWndProc: Received WM_ACTIVATE (WA_INACTIVE). Focus lost.";
+            }
+
+            SetWindowTextA(*hGameWnd, RsGlobal->AppName);
+            SetCursorVisible(true);
+
+            if (bFullMode)
+            {
+                LOG_STREAM << "MvlWndProc: Minimizing window due to focus loss.";
+                ShowWindow(*hGameWnd, SW_MINIMIZE);
+            }
         }
         else if (uMsg == WM_ACTIVATE) // focus GAINED (gra wraca na pierwszy plan)
         {
@@ -531,8 +544,8 @@ LRESULT APIENTRY CDxHandler::MvlWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPA
 
     case WM_EXITSIZEMOVE:
         LOG_STREAM << "MvlWndProc: Received WM_EXITSIZEMOVE (User finished moving/resizing window).";
-        // ... (reszta kodu) ...
-        break; // Dodano break
+        bSizingLoop = false; // <-- Przywrócono logikę z Twojego kodu
+        // Musimy przejść do obsługi poniżej
 
     case WM_SIZE:
     case WM_SIZING:
